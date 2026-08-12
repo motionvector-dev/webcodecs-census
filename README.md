@@ -73,6 +73,29 @@ Held by:
       (frame emitted by this VideoDecoder)
 ```
 
+### Found in the wild
+
+Pointed at [the application](https://example.com)'s server-render pipeline — a Vite app with eleven worker call sites — it instrumented 11 contexts, including `data:` and `blob:` URL workers, with no change to the application. In one of them:
+
+```
+entered: {VideoDecoder:constructed: 1, VideoFrame:decoded: 238}
+left:    {VideoFrame:closed: 179}
+live:     58 VideoFrame          collectedUnclosed: {VideoFrame: 1}
+site:     PackagerWorker.setupDecoder
+          ← initializeBuffers ← start
+```
+
+The timeline is what made it diagnosable rather than merely visible:
+
+```
+   t(s)  liveVF  dec/out  queued
+     12      59    0/0        0
+     58      58    0/0        0
+    162      58    0/0        0
+```
+
+Two of 330 samples had any decode activity, all in the first seconds, with the decode queue pinned at 0. The decoder was **idle, not backlogged** — while the UI read "Rendering in Progress — 0%" indefinitely, throwing nothing and logging nothing. A snapshot alone reports "58 frames live", which reads like normal buffering. Reading the attributed function then showed a `pendingWork` flag that is set before an `await` with no `try/finally` and one early return that skips its reset: strand it once and the buffer never drains again.
+
 ### MCP server
 
 ```json
