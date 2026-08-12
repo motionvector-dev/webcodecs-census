@@ -323,7 +323,7 @@ ${shim}
 }
 
 async function loadShim(): Promise<string> {
-  const { SHIM_SOURCE } = await import('@unfoundbox/webcodecs-census/shim');
+  const { SHIM_SOURCE } = await import('@motionvector/webcodecs-census/shim');
   return SHIM_SOURCE as string;
 }
 

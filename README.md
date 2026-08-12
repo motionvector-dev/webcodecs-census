@@ -40,7 +40,7 @@ The census wraps the `output` callback at construction time. Because there are n
 ## Install
 
 ```bash
-npm install --save-dev @unfoundbox/webcodecs-census
+npm install --save-dev @motionvector/webcodecs-census
 ```
 
 ## Use it from an agent
@@ -48,8 +48,8 @@ npm install --save-dev @unfoundbox/webcodecs-census
 The point of this project. One call, structured output, no screenshots:
 
 ```js
-import { attach, launchChrome } from '@unfoundbox/webcodecs-census-cdp';
-import { summarize, checkLeaks } from '@unfoundbox/webcodecs-census';
+import { attach, launchChrome } from '@motionvector/webcodecs-census-cdp';
+import { summarize, checkLeaks } from '@motionvector/webcodecs-census';
 
 const chrome = await launchChrome({ executablePath: CHROME });
 const session = await attach({ browserURL: chrome.browserURL });
@@ -101,7 +101,7 @@ Two of 330 samples had any decode activity, all in the first seconds, with the d
 ```json
 {
   "mcpServers": {
-    "webcodecs-census": { "command": "npx", "args": ["-y", "@unfoundbox/webcodecs-census-mcp"] }
+    "webcodecs-census": { "command": "npx", "args": ["-y", "@motionvector/webcodecs-census-mcp"] }
   }
 }
 ```
@@ -113,7 +113,7 @@ Tools: `webcodecs_attach`, `webcodecs_census`, `webcodecs_leak_sites`, `webcodec
 A leak becomes a test failure instead of something someone notices six months later:
 
 ```js
-import { expectNoLeakedFrames } from '@unfoundbox/webcodecs-census';
+import { expectNoLeakedFrames } from '@motionvector/webcodecs-census';
 
 test('the editor releases every frame it decodes', async () => {
   await playThroughTimeline();

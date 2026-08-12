@@ -16,8 +16,8 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { attach, launchChrome, type CensusSession } from '@unfoundbox/webcodecs-census-cdp';
-import { checkLeaks, summarize } from '@unfoundbox/webcodecs-census';
+import { attach, launchChrome, type CensusSession } from '@motionvector/webcodecs-census-cdp';
+import { checkLeaks, summarize } from '@motionvector/webcodecs-census';
 
 let session: CensusSession | null = null;
 let chrome: Awaited<ReturnType<typeof launchChrome>> | null = null;

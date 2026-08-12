@@ -1,5 +1,5 @@
 {
-  "name": "@unfoundbox/webcodecs-census-mcp",
+  "name": "@motionvector/webcodecs-census-mcp",
   "version": "0.1.0",
   "description": "MCP server for the WebCodecs census — let an agent find leaked VideoFrames, with allocation stacks, without a browser UI in the loop.",
   "type": "module",
@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@unfoundbox/webcodecs-census": "0.1.0",
-    "@unfoundbox/webcodecs-census-cdp": "0.1.0"
+    "@motionvector/webcodecs-census": "0.1.0",
+    "@motionvector/webcodecs-census-cdp": "0.1.0"
   },
   "engines": {
     "node": ">=20"

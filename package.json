@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @unfoundbox/webcodecs-census && npm run build -w @unfoundbox/webcodecs-census-cdp && npm run build -w @unfoundbox/webcodecs-census-mcp",
+    "build": "npm run build -w @motionvector/webcodecs-census && npm run build -w @motionvector/webcodecs-census-cdp && npm run build -w @motionvector/webcodecs-census-mcp",
     "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

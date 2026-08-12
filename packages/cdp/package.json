@@ -1,5 +1,5 @@
 {
-  "name": "@unfoundbox/webcodecs-census-cdp",
+  "name": "@motionvector/webcodecs-census-cdp",
   "version": "0.1.0",
   "description": "Inject the WebCodecs census into a running Chrome — page, iframes and Web Workers — over the DevTools Protocol.",
   "type": "module",
@@ -20,7 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@unfoundbox/webcodecs-census": "0.1.0"
+    "@motionvector/webcodecs-census": "0.1.0"
   },
   "engines": {
     "node": ">=20"
