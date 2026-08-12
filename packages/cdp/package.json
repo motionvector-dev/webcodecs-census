@@ -1,7 +1,7 @@
 {
   "name": "@motionvector/webcodecs-census-cdp",
   "version": "0.1.0",
-  "description": "Inject the WebCodecs census into a running Chrome — page, iframes and Web Workers — over the DevTools Protocol.",
+  "description": "Inject the WebCodecs census into a running Chrome \u2014 page, iframes and Web Workers \u2014 over the DevTools Protocol.",
   "type": "module",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -29,5 +29,8 @@
     "type": "git",
     "url": "git+https://github.com/unfoundbox/webcodecs-census.git",
     "directory": "packages/cdp"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

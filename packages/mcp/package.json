@@ -1,7 +1,7 @@
 {
   "name": "@motionvector/webcodecs-census-mcp",
   "version": "0.1.0",
-  "description": "MCP server for the WebCodecs census — let an agent find leaked VideoFrames, with allocation stacks, without a browser UI in the loop.",
+  "description": "MCP server for the WebCodecs census \u2014 let an agent find leaked VideoFrames, with allocation stacks, without a browser UI in the loop.",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -25,5 +25,8 @@
     "type": "git",
     "url": "git+https://github.com/unfoundbox/webcodecs-census.git",
     "directory": "packages/mcp"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
