@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>encode/decode round trip</title>
+<body>
+<script type="module">
+  // Real decoded frames, which is the case that matters: they are created by the
+  // platform and handed to the output callback, never constructed in JS.
+  const worker = new Worker('./roundtrip-worker.js', { type: 'module' });
+  window.__done = null;
+  worker.onmessage = (e) => { window.__done = e.data; };
+  window.__worker = worker;
+</script>
+</body>

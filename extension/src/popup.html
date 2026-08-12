@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebCodecs Census</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+    width: 380px; margin: 0; padding: 12px;
+  }
+  h1 { font-size: 13px; margin: 0 0 8px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  button {
+    font: inherit; padding: 4px 10px; border-radius: 6px;
+    border: 1px solid currentColor; background: transparent; cursor: pointer;
+  }
+  pre {
+    margin: 0; padding: 8px; border-radius: 6px;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    max-height: 340px; overflow: auto; white-space: pre-wrap;
+    font: 11px/1.45 ui-monospace, monospace;
+  }
+  .note { opacity: .7; font-size: 11px; }
+</style>
+<body>
+  <h1>WebCodecs Census</h1>
+  <div class="row">
+    <button id="refresh">Snapshot</button>
+    <button id="toggle">Enable exact mode</button>
+  </div>
+  <p class="note" id="mode"></p>
+  <pre id="out">Loading…</pre>
+  <script src="popup.js" type="module"></script>
+</body>

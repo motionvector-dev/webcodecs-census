@@ -1,0 +1,21 @@
+{
+  "name": "webcodecs-census-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @unfoundbox/webcodecs-census && npm run build -w @unfoundbox/webcodecs-census-cdp && npm run build -w @unfoundbox/webcodecs-census-mcp",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "@unfoundbox/webcodecs-census",
+  "version": "0.1.0",
+  "description": "Find leaked VideoFrames, AudioData and codecs in WebCodecs apps — including inside Web Workers — and get the allocation stack that caused them.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./shim": {
+      "types": "./dist/shim.d.ts",
+      "import": "./dist/shim.js"
+    },
+    "./shim.txt": "./dist/shim.global.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node build.mjs && tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "webcodecs",
+    "videoframe",
+    "memory-leak",
+    "debugging",
+    "web-worker",
+    "devtools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/unfoundbox/webcodecs-census.git",
+    "directory": "packages/core"
+  }
+}

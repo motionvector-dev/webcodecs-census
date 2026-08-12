@@ -1,0 +1,29 @@
+{
+  "name": "@unfoundbox/webcodecs-census-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for the WebCodecs census — let an agent find leaked VideoFrames, with allocation stacks, without a browser UI in the loop.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "webcodecs-census-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --packages=external --banner:js='#!/usr/bin/env node' --outfile=dist/index.js && chmod +x dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@unfoundbox/webcodecs-census": "0.1.0",
+    "@unfoundbox/webcodecs-census-cdp": "0.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/unfoundbox/webcodecs-census.git",
+    "directory": "packages/mcp"
+  }
+}

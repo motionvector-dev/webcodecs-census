@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>webcodecs-census fixture</title>
+<body>
+<script type="module">
+  // A module worker, the shape a Vite `?worker&url` import produces.
+  const worker = new Worker('./decoder-worker.js', { type: 'module' });
+  window.__messages = [];
+  worker.onmessage = (e) => window.__messages.push(e.data);
+  window.__worker = worker;
+
+  // Main-thread leak, so the page context has something to find too.
+  window.__mainLeak = new VideoFrame(new Uint8Array(16), {
+    format: 'RGBA', codedWidth: 2, codedHeight: 2, timestamp: 0,
+  });
+
+  // A frame transferred away: the sender must not report this as a leak.
+  const handoff = new VideoFrame(new Uint8Array(16), {
+    format: 'RGBA', codedWidth: 2, codedHeight: 2, timestamp: 2,
+  });
+  worker.postMessage({ cmd: 'adopt', frame: handoff }, [handoff]);
+
+  // A media element that will never load, to exercise the stall detector.
+  const el = document.createElement('video');
+  el.src = 'data:video/mp4;base64,AAAA';
+  document.body.append(el);
+  window.__video = el;
+</script>
+</body>
