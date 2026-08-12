@@ -275,6 +275,29 @@ export class CensusSession {
     await this.#client.send('Page.navigate', { url });
   }
 
+  /**
+   * Serve a remote URL from somewhere else. Useful for pinning a large media
+   * asset to a local copy so a run is fast and repeatable without editing the
+   * application under test.
+   */
+  async redirect(rules: { from: string | RegExp; to: string }[]): Promise<void> {
+    await this.#client.send('Fetch.enable', {
+      patterns: [{ urlPattern: '*', requestStage: 'Request' }],
+    });
+    this.#client.on(async (msg) => {
+      if (msg.method !== 'Fetch.requestPaused') return;
+      const { requestId, request } = msg.params;
+      const hit = rules.find((r) =>
+        typeof r.from === 'string' ? request.url.includes(r.from) : r.from.test(request.url),
+      );
+      if (hit) {
+        await this.#client.trySend('Fetch.continueRequest', { requestId, url: hit.to });
+      } else {
+        await this.#client.trySend('Fetch.continueRequest', { requestId });
+      }
+    });
+  }
+
   detach(): void {
     this.#detachListener?.();
     this.#client.close();

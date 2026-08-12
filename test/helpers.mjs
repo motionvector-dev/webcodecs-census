@@ -53,6 +53,63 @@ export function findChrome() {
   return null;
 }
 
+/**
+ * Serve one file with Range support. Media pipelines issue range requests and
+ * a server that ignores them either stalls or hands back the whole file for
+ * every seek, which changes the behaviour being measured.
+ */
+export async function serveFile(path, contentType = 'video/mp4') {
+  const { createReadStream, statSync } = await import('node:fs');
+  const size = statSync(path).size;
+
+  // When this stands in for a cross-origin asset the page still applies CORS to
+  // it, so the headers have to be permissive or the fetch fails with ERR_FAILED
+  // and the app simply waits forever.
+  const cors = {
+    'access-control-allow-origin': '*',
+    'access-control-allow-headers': '*',
+    'access-control-expose-headers': 'content-length,content-range,accept-ranges',
+  };
+
+  const server = createServer((req, res) => {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { ...cors, 'access-control-allow-methods': 'GET,HEAD,OPTIONS' });
+      res.end();
+      return;
+    }
+
+    const range = req.headers.range;
+    if (!range) {
+      res.writeHead(200, {
+        ...cors,
+        'content-length': size,
+        'content-type': contentType,
+        'accept-ranges': 'bytes',
+      });
+      createReadStream(path).pipe(res);
+      return;
+    }
+    const [startRaw, endRaw] = range.replace(/bytes=/, '').split('-');
+    const start = Number(startRaw);
+    const end = endRaw ? Number(endRaw) : size - 1;
+    res.writeHead(206, {
+      ...cors,
+      'content-range': `bytes ${start}-${end}/${size}`,
+      'accept-ranges': 'bytes',
+      'content-length': end - start + 1,
+      'content-type': contentType,
+    });
+    createReadStream(path, { start, end }).pipe(res);
+  });
+
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return {
+    server,
+    url: `http://127.0.0.1:${server.address().port}/media.mp4`,
+    close: () => server.close(),
+  };
+}
+
 export const waitFor = async (fn, { timeoutMs = 5000, everyMs = 100 } = {}) => {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
