@@ -13,7 +13,8 @@
     "preflight": "node scripts/preflight.mjs",
     "build:extension": "cd extension && node make-icons.mjs && node build.mjs",
     "build:all": "npm run build && npm run build:extension && npm run build:fixtures",
-    "build:fixtures": "node test/build-fixtures.mjs"
+    "build:fixtures": "node test/build-fixtures.mjs",
+    "build:diagram": "node scripts/make-diagram.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

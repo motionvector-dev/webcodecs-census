@@ -2,7 +2,6 @@ node_modules/
 dist/
 extension/dist/
 extension/icons/
-test/fixtures/compare.html
 *.log
 .DS_Store
 

@@ -1,10 +1,33 @@
+<div align="center">
+
 # WebCodecs Census
 
-Find leaked `VideoFrame`s, `AudioData` and codecs in a WebCodecs app — **including inside Web Workers** — and get the line of code that allocated them.
+[![npm](https://img.shields.io/npm/v/@motionvector/webcodecs-census?logo=npm&color=cb3837)](https://www.npmjs.com/package/@motionvector/webcodecs-census)
+[![CI](https://img.shields.io/github/actions/workflow/status/unfoundbox/webcodecs-census/ci.yml?branch=main&logo=github&label=tests)](https://github.com/unfoundbox/webcodecs-census/actions/workflows/ci.yml)
+[![bundle size](https://img.shields.io/bundlephobia/minzip/@motionvector/webcodecs-census?label=core)](https://bundlephobia.com/package/@motionvector/webcodecs-census)
+[![provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](https://docs.npmjs.com/generating-provenance-statements)
+[![licence](https://img.shields.io/npm/l/@motionvector/webcodecs-census?color=blue)](./LICENSE)
+
+**Find leaked `VideoFrame`s, `AudioData` and codecs in a WebCodecs app — including inside Web Workers — and get the line of code that allocated them.**
+
+[Why it's hard](#why-this-is-hard-and-why-it-didnt-exist) &nbsp;·&nbsp;
+[Use from an agent](#use-it-from-an-agent) &nbsp;·&nbsp;
+[Use in CI](#use-it-in-ci) &nbsp;·&nbsp;
+[Extension](#browser-extension) &nbsp;·&nbsp;
+[MCP server](#mcp-server)
+
+</div>
 
 WebCodecs objects hold resources from a finite pool outside the JS heap. The garbage collector never reclaims them; only `close()` does. Chrome's own guidance is blunt about the consequence: forget `frame.close()` and you leak GPU memory fast. But nothing in the platform tells you *that* you leaked one, *how many*, or *where from*. The app just gets slower, then quietly stops decoding.
 
 DevTools' Media panel lists media players. It does not tell you which frames leaked or who allocated them. As far as we can find, nothing else does either.
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/injection-dark.svg">
+    <img alt="Two-phase injection into a Web Worker" src="./docs/injection-light.svg" width="900">
+  </picture>
+</div>
 
 ## Why this is hard, and why it didn't exist
 
@@ -60,41 +83,21 @@ console.log(summarize(censuses));
 ```
 
 ```
-3 context(s): main, decoder_worker, transformer_worker
-  main (21s): VideoFrame=1 | media 4 (1 stalled)
-  decoder_worker (20s): VideoFrame=137
-  transformer_worker (20s): nothing live
+2 context(s): main, worker
+  main (3s): nothing live
+  worker (3s): VideoDecoder=1 VideoFrame=5
 
-137 VideoFrame still live (allowed 0).
+5 VideoFrame still live (allowed 0).
 
 Held by:
-  137x VideoFrame (decoded, oldest 18420ms) in decoder_worker
-      at Renderer.setupDecoder (renderer.js:68:24)
+  5x VideoFrame (decoded, oldest 100ms) in worker
+      at VideoSample.toVideoFrame (pipeline.js:17261:14)
       (frame emitted by this VideoDecoder)
 ```
 
-### Found in the wild
+### Who this is for
 
-Pointed at [the application](https://example.com)'s server-render pipeline — a Vite app with eleven worker call sites — it instrumented 11 contexts, including `data:` and `blob:` URL workers, with no change to the application. In one of them:
-
-```
-entered: {VideoDecoder:constructed: 1, VideoFrame:decoded: 238}
-left:    {VideoFrame:closed: 179}
-live:     58 VideoFrame          collectedUnclosed: {VideoFrame: 1}
-site:     PackagerWorker.setupDecoder
-          ← initializeBuffers ← start
-```
-
-The timeline is what made it diagnosable rather than merely visible:
-
-```
-   t(s)  liveVF  dec/out  queued
-     12      59    0/0        0
-     58      58    0/0        0
-    162      58    0/0        0
-```
-
-Two of 330 samples had any decode activity, all in the first seconds, with the decode queue pinned at 0. The decoder was **idle, not backlogged** — while the UI read "Rendering in Progress — 0%" indefinitely, throwing nothing and logging nothing. A snapshot alone reports "58 frames live", which reads like normal buffering. Reading the attributed function then showed a `pendingWork` flag that is set before an `await` with no `try/finally` and one early return that skips its reset: strand it once and the buffer never drains again.
+Anything decoding or encoding in the browser: timeline editors, recorders, transcoders, players that seek by decoding. [Clipchamp presented its WebCodecs pipeline at a W3C workshop](https://www.w3.org/2021/03/media-production-workshop/talks/slides/soeren-balko-clipchamp-webcodecs.pdf), and [Remotion has folded its media parser into mediabunny](https://www.remotion.dev/blog/mediabunny) and now recommends it. The more of your pipeline lives in a library, the more of it an app-only instrument cannot see.
 
 ### Works through libraries, not just your own code
 
