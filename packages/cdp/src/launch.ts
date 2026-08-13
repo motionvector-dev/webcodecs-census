@@ -123,7 +123,25 @@ export async function launchChrome(options: LaunchOptions): Promise<LaunchedChro
     browserURL,
     kill: async () => {
       if (!proc.killed) proc.kill('SIGKILL');
-      await rm(profile, { recursive: true, force: true });
+
+      // Chrome's helper processes outlive the one we signalled, and they keep
+      // writing to the profile. Removing it straight away races them and fails
+      // with ENOTEMPTY — which surfaced as a stalled teardown in CI rather than
+      // as anything resembling a cleanup problem.
+      await Promise.race([
+        new Promise((r) => proc.once('exit', r)),
+        new Promise((r) => setTimeout(r, 5000)),
+      ]);
+
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          await rm(profile, { recursive: true, force: true });
+          return;
+        } catch {
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      }
+      // A leftover directory under the OS temp dir is not worth failing a run.
     },
   };
 }
