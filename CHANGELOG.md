@@ -26,7 +26,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   version being released, so re-running a release that failed part-way finishes
   the job instead of aborting on the first "cannot publish over previously
   published versions".
-
 - `test/mediabunny.test.mjs`, which builds a real MP4 with
   [mediabunny](https://github.com/Vanilagy/mediabunny), decodes it back through
   that library's own `VideoSampleSink`, and asserts the census counts the codecs
