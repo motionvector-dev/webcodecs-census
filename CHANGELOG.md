@@ -48,6 +48,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Moved to the `motionvector-dev` GitHub organisation, matching the
+  `motionvector.dev` domain and the `@motionvector` npm scope. GitHub redirects
+  the old URL, but **the npm trusted-publisher configuration names the repository
+  owner and must be re-pointed by hand**, or publishing fails with an
+  authentication error that says nothing about the cause.
+- The internal state key moves from `Symbol.for('unfoundbox.webcodecs-census')`
+  to `Symbol.for('motionvector.webcodecs-census')`. It is an implementation
+  detail, but two versions in one page would no longer share state — harmless
+  now, worth knowing before 1.0.
 - **The extension no longer instruments anything until you enable a site.** It
   previously declared content scripts on `<all_urls>`, so installing it patched
   the WebCodecs globals and exposed the census API in the main world of every
@@ -112,5 +121,5 @@ First release.
   `webcodecs_leak_sites`, `webcodecs_timeline`, `webcodecs_evaluate` and
   `webcodecs_detach`.
 
-[Unreleased]: https://github.com/unfoundbox/webcodecs-census/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/unfoundbox/webcodecs-census/releases/tag/v0.1.0
+[Unreleased]: https://github.com/motionvector-dev/webcodecs-census/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/motionvector-dev/webcodecs-census/releases/tag/v0.1.0

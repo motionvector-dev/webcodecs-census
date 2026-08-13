@@ -1,10 +1,10 @@
 # Review is required on everything by default.
-*                       @unfoundbox
+*                       @motionvector-dev
 
 # The parts where a mistake is either a security problem or a silent loss of
 # coverage — the exact cases this project exists to avoid.
-/.github/workflows/     @unfoundbox
-/scripts/publish.mjs    @unfoundbox
-/extension/manifest.json @unfoundbox
-/packages/core/src/     @unfoundbox
-/SECURITY.md            @unfoundbox
+/.github/workflows/     @motionvector-dev
+/scripts/publish.mjs    @motionvector-dev
+/extension/manifest.json @motionvector-dev
+/packages/core/src/     @motionvector-dev
+/SECURITY.md            @motionvector-dev

@@ -87,7 +87,7 @@ describe('extension', { skip }, () => {
       expression: `JSON.stringify({
         census: typeof window.__webcodecsCensus,
         patched: !!(VideoFrame && VideoFrame.__wccPatched),
-        workerPatch: !!globalThis[Symbol.for('unfoundbox.webcodecs-census.worker-patch')],
+        workerPatch: !!globalThis[Symbol.for('motionvector.webcodecs-census.worker-patch')],
       })`,
       returnByValue: true,
     });
@@ -142,7 +142,7 @@ describe('extension', { skip }, () => {
     const state = JSON.parse(
       (
         await client.send('Runtime.evaluate', {
-          expression: `JSON.stringify(globalThis[Symbol.for('unfoundbox.webcodecs-census.worker-patch')] ?? null)`,
+          expression: `JSON.stringify(globalThis[Symbol.for('motionvector.webcodecs-census.worker-patch')] ?? null)`,
           returnByValue: true,
         })
       ).result.value,

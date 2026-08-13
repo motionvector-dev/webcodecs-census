@@ -3,7 +3,7 @@
 # WebCodecs Census
 
 [![npm](https://img.shields.io/npm/v/@motionvector/webcodecs-census?logo=npm&color=cb3837)](https://www.npmjs.com/package/@motionvector/webcodecs-census)
-[![CI](https://img.shields.io/github/actions/workflow/status/unfoundbox/webcodecs-census/ci.yml?branch=main&logo=github&label=tests)](https://github.com/unfoundbox/webcodecs-census/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/motionvector-dev/webcodecs-census/ci.yml?branch=main&logo=github&label=tests)](https://github.com/motionvector-dev/webcodecs-census/actions/workflows/ci.yml)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/@motionvector/webcodecs-census?label=core)](https://bundlephobia.com/package/@motionvector/webcodecs-census)
 [![provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](https://docs.npmjs.com/generating-provenance-statements)
 [![licence](https://img.shields.io/npm/l/@motionvector/webcodecs-census?color=blue)](./LICENSE)
@@ -278,7 +278,7 @@ publisher*:
 
 | Field | Value |
 | --- | --- |
-| Organization or user | `unfoundbox` |
+| Organization or user | `motionvector-dev` |
 | Repository | `webcodecs-census` |
 | Workflow filename | `release.yml` |
 | Environment | *(leave empty)* |

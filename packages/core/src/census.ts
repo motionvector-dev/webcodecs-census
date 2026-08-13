@@ -75,7 +75,7 @@ interface State {
   timer: any;
 }
 
-const STATE_KEY = Symbol.for('unfoundbox.webcodecs-census');
+const STATE_KEY = Symbol.for('motionvector.webcodecs-census');
 const g = globalThis as any;
 
 const zeroActivity = (): Activity => ({

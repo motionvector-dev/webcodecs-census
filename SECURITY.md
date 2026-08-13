@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report privately through
-[GitHub Security Advisories](https://github.com/unfoundbox/webcodecs-census/security/advisories/new).
+[GitHub Security Advisories](https://github.com/motionvector-dev/webcodecs-census/security/advisories/new).
 Please do not open a public issue for anything exploitable.
 
 Expect an acknowledgement within a few days. This is a small project maintained

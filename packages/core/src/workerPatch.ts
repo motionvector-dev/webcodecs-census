@@ -20,7 +20,7 @@
  */
 
 const g = globalThis as any;
-const PATCH_KEY = Symbol.for('unfoundbox.webcodecs-census.worker-patch');
+const PATCH_KEY = Symbol.for('motionvector.webcodecs-census.worker-patch');
 
 export interface WorkerPatchState {
   wrapped: number;

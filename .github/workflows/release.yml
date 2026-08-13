@@ -70,7 +70,7 @@ jobs:
 
       - name: Publish to npm
         # Authenticated by OIDC, which requires a trusted publisher configured on
-        # npmjs.com for each package: owner unfoundbox, repo webcodecs-census,
+        # npmjs.com for each package: owner motionvector-dev, repo webcodecs-census,
         # workflow release.yml. No long-lived token exists to leak or rotate.
         run: node scripts/publish.mjs
 
