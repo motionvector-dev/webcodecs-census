@@ -96,6 +96,29 @@ The timeline is what made it diagnosable rather than merely visible:
 
 Two of 330 samples had any decode activity, all in the first seconds, with the decode queue pinned at 0. The decoder was **idle, not backlogged** — while the UI read "Rendering in Progress — 0%" indefinitely, throwing nothing and logging nothing. A snapshot alone reports "58 frames live", which reads like normal buffering. Reading the attributed function then showed a `pendingWork` flag that is set before an `await` with no `try/finally` and one early return that skips its reset: strand it once and the buffer never drains again.
 
+### Works through libraries, not just your own code
+
+If you use a WebCodecs toolkit like [mediabunny](https://github.com/Vanilagy/mediabunny), you never write `new VideoDecoder` — the library does. An instrument that only traps what *your* code constructs reports a clean bill of health for your entire pipeline.
+
+The census patches the globals, and mediabunny references them at call time rather than capturing them at module scope, so everything it builds internally is counted. mediabunny also has a documented double-ownership rule that is easy to get wrong:
+
+> The `VideoFrame` returned by this method **must** be closed separately from this video sample.
+
+Close every `VideoSample` diligently, forget the frames, and you leak silently. Decoding ten frames through `VideoSampleSink` and closing half of them:
+
+```
+entered: {VideoFrame:constructed: 30, VideoEncoder:constructed: 1,
+          VideoDecoder:constructed: 1, VideoFrame:decoded: 10}
+left:    {VideoFrame:closed: 35, VideoEncoder:closed: 1, VideoDecoder:closed: 1}
+live:    {VideoFrame: 5}
+
+  5x VideoFrame (constructed, oldest 100ms)
+     at _VideoSample.toVideoFrame (mediabunny-worker.js:17261:14)
+     at decodeAndLeak (mediabunny-worker.js:26282:26)
+```
+
+The codecs mediabunny created are counted, and the leak is attributed to the exact method whose contract was broken. `test/mediabunny.test.mjs` builds a real MP4 with mediabunny, decodes it back through its own sinks, and asserts all of this.
+
 ### MCP server
 
 ```json

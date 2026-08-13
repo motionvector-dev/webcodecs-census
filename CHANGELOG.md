@@ -21,9 +21,29 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `npm run preflight`, which checks npm login and org membership before a
   release spends a full build-and-test cycle discovering it cannot publish.
 
+- `test/mediabunny.test.mjs`, which builds a real MP4 with
+  [mediabunny](https://github.com/Vanilagy/mediabunny), decodes it back through
+  that library's own `VideoSampleSink`, and asserts the census counts the codecs
+  mediabunny created internally — the case where an instrument that only traps
+  what the application constructs reports nothing at all. It also leaks frames
+  through mediabunny's documented sample-versus-frame ownership split and
+  asserts the leak is attributed to `toVideoFrame`, the method whose contract
+  was broken.
+
 ### Changed
 
 - Tests no longer bind fixed debugging ports, and pass `--no-sandbox` under CI.
+
+### Fixed
+
+- `launchChrome` drained neither of Chrome's output streams. Chrome fills the
+  64 kB stderr buffer within seconds on Linux and then blocks forever; macOS is
+  quiet enough that it never appeared locally. The first CI run hung with no
+  output at all.
+- `kill()` removed the profile directory in the same breath as signalling
+  Chrome, racing the helper processes still writing there and failing with
+  `ENOTEMPTY` — which surfaced as a stalled test file rather than anything
+  resembling a cleanup problem.
 
 ## [0.1.0] - 2026-08-13
 
