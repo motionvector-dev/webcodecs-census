@@ -1,129 +1,105 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="430" viewBox="0 0 900 430" role="img"
-     aria-label="Two-phase injection: at the auto-attach pause a worker has frame types but no codecs or timers; at the beforeScriptExecution pause it has everything, still before the worker's own code runs.">
-  <rect width="900" height="430" fill="none"/>
-
-  <text x="0" y="18" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="600" fill="#1f2328">
-    Getting instrumentation into a worker before its first line
-  </text>
-  <text x="0" y="38" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#59636e">
-    A dedicated worker's global is only half built when Chrome first pauses it.
-  </text>
-
-  <!-- timeline -->
-  <line x1="30" y1="72" x2="870" y2="72" stroke="#d1d9e0" stroke-width="2"/>
-  
-  <circle cx="30" cy="72" r="5"
-          fill="#59636e"/>
-  <text x="30" y="56" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12"
-        font-weight="400"
-        fill="#59636e"
-        text-anchor="start">new Worker()</text>
-  <circle cx="300" cy="72" r="7"
-          fill="#0969da"/>
-  <text x="300" y="56" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12"
-        font-weight="600"
-        fill="#0969da"
-        text-anchor="middle">auto-attach pause</text>
-  <circle cx="600" cy="72" r="7"
-          fill="#0969da"/>
-  <text x="600" y="56" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12"
-        font-weight="600"
-        fill="#0969da"
-        text-anchor="middle">beforeScriptExecution</text>
-  <circle cx="870" cy="72" r="5"
-          fill="#59636e"/>
-  <text x="870" y="60" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12"
-        font-weight="400"
-        fill="#59636e"
-        text-anchor="end">worker code runs</text>
-
-  
-  <rect x="170" y="100" width="260" height="290" rx="8"
-        fill="#f6f8fa" stroke="#cf222e" stroke-width="1.5"/>
-  <text x="186" y="126" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14"
-        font-weight="600" fill="#1f2328">Phase 1 — too early</text>
-  <text x="186" y="146" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12"
-        fill="#59636e">Target.setAutoAttach, waitForDebuggerOnStart</text>
-  <path d="M190 161 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="210" y="169" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">VideoFrame</text><path d="M190 182 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="210" y="190" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">AudioData</text><path d="M190 203 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="210" y="211" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">EncodedVideoChunk</text><path d="M190 221 l10 10 M200 221 l-10 10" fill="none"
-              stroke="#cf222e" stroke-width="2" stroke-linecap="round"/>
-    <text x="210" y="232" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#59636e">VideoDecoder</text><path d="M190 242 l10 10 M200 242 l-10 10" fill="none"
-              stroke="#cf222e" stroke-width="2" stroke-linecap="round"/>
-    <text x="210" y="253" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#59636e">VideoEncoder</text><path d="M190 263 l10 10 M200 263 l-10 10" fill="none"
-              stroke="#cf222e" stroke-width="2" stroke-linecap="round"/>
-    <text x="210" y="274" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#59636e">AudioDecoder</text><path d="M190 284 l10 10 M200 284 l-10 10" fill="none"
-              stroke="#cf222e" stroke-width="2" stroke-linecap="round"/>
-    <text x="210" y="295" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#59636e">setTimeout</text><path d="M190 305 l10 10 M200 305 l-10 10" fill="none"
-              stroke="#cf222e" stroke-width="2" stroke-linecap="round"/>
-    <text x="210" y="316" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#59636e">setInterval</text>
-  <text x="190" y="360" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#cf222e">
-    Patch here and every codec is missed.
-  </text>
-
-  
-  <rect x="470" y="100" width="260" height="290" rx="8"
-        fill="#f6f8fa" stroke="#1a7f37" stroke-width="1.5"/>
-  <text x="486" y="126" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14"
-        font-weight="600" fill="#1f2328">Phase 2 — complete, still early</text>
-  <text x="486" y="146" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12"
-        fill="#59636e">Debugger.setInstrumentationBreakpoint</text>
-  <path d="M490 161 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="510" y="169" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">VideoFrame</text><path d="M490 182 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="510" y="190" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">AudioData</text><path d="M490 203 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="510" y="211" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">EncodedVideoChunk</text><path d="M490 224 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="510" y="232" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">VideoDecoder</text><path d="M490 245 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="510" y="253" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">VideoEncoder</text><path d="M490 266 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="510" y="274" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">AudioDecoder</text><path d="M490 287 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="510" y="295" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">setTimeout</text><path d="M490 308 l4 4 l7 -8" fill="none" stroke="#1a7f37" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="510" y="316" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12.5"
-          fill="#1f2328">setInterval</text>
-  <text x="490" y="360" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#1a7f37">
-    Inject here. Nothing has run yet.
-  </text>
-
-  <!-- resume arrow between the two -->
-  <path d="M436 245 L462 245" stroke="#0969da" stroke-width="2" fill="none"
-        marker-end="url(#arrow-1f2328)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="500" viewBox="0 0 880 500" role="img"
+     aria-label="Sequence diagram. The driver arms auto-attach; Chrome pauses the new worker before its first line, but the worker global is incomplete there — codecs and timers do not exist yet. The driver sets a beforeScriptExecution breakpoint and resumes, landing in a second pause where the global is complete and the worker's own code still has not run. The census is evaluated there, then execution resumes.">
   <defs>
-    <marker id="arrow-1f2328" viewBox="0 0 10 10" refX="8" refY="5"
-            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0969da"/>
+    <marker id="head-fg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1f2328"/>
+    </marker>
+    <marker id="head-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#59636e"/>
+    </marker>
+    <marker id="head-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#0969da"/>
     </marker>
   </defs>
-  <text x="449" y="236" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10.5" fill="#0969da"
-        text-anchor="middle">resume</text>
 
-  <rect x="760" y="100" width="140" height="290" rx="8" fill="#ddf4ff"
-        stroke="#0969da" stroke-width="1"/>
-  <text x="774" y="126" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600"
-        fill="#1f2328">Why it matters</text>
-  <text x="774" y="152" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Decoders usually</text><text x="774" y="169" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">live in workers.</text><text x="774" y="186" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e"></text><text x="774" y="203" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Page-level</text><text x="774" y="220" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">patching cannot</text><text x="774" y="237" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">reach them at all.</text><text x="774" y="254" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e"></text><text x="774" y="271" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Miss them and the</text><text x="774" y="288" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">tool reports "no</text><text x="774" y="305" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">leaks" for an app</text><text x="774" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">losing every frame.</text>
+  <text x="0" y="16" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328">
+    Reaching a worker before its first line takes two pauses, not one
+  </text>
+
+  
+  <text x="118" y="34" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600"
+        fill="#1f2328" text-anchor="middle">census driver</text>
+  <text x="118" y="50" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10.5"
+        fill="#59636e" text-anchor="middle">your process</text>
+  <line x1="118" y1="78" x2="118" y2="474" stroke="#d1d9e0"
+        stroke-width="1.5" stroke-dasharray="3 5"/>
+  <text x="440" y="34" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600"
+        fill="#1f2328" text-anchor="middle">Chrome</text>
+  <text x="440" y="50" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10.5"
+        fill="#59636e" text-anchor="middle">DevTools Protocol</text>
+  <line x1="440" y1="78" x2="440" y2="474" stroke="#d1d9e0"
+        stroke-width="1.5" stroke-dasharray="3 5"/>
+  <text x="762" y="34" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600"
+        fill="#1f2328" text-anchor="middle">worker</text>
+  <text x="762" y="50" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10.5"
+        fill="#59636e" text-anchor="middle">global scope</text>
+  <line x1="762" y1="140" x2="762" y2="474" stroke="#d1d9e0"
+        stroke-width="1.5" stroke-dasharray="3 5"/>
+
+  
+  <line x1="124" y1="100" x2="434" y2="100" stroke="#1f2328"
+        stroke-width="1.5" marker-end="url(#head-fg)"/>
+  <text x="279" y="93" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11"
+        fill="#1f2328" text-anchor="middle">Target.setAutoAttach { waitForDebuggerOnStart }</text>
+  
+  <path d="M440 121 h26 a5 5 0 0 1 5 5 v8 a5 5 0 0 1 -5 5 h-26" fill="none" stroke="#59636e" stroke-width="1.3"
+        marker-end="url(#head-muted)"/>
+  <text x="480" y="135" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11"
+        fill="#59636e" text-anchor="start">page calls new Worker()</text>
+
+  
+  <rect x="576" y="158" width="290" height="96" rx="6" fill="#fff1e5" stroke="#ffb77c"
+        stroke-width="1"/>
+  <text x="596" y="176" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600"
+        fill="#9a6700">Pause 1 — global is half built</text>
+  <text x="596" y="192" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="10.5"
+             fill="#9a6700">✓ VideoFrame</text><text x="596" y="207" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="10.5"
+             fill="#59636e">✕ VideoDecoder</text><text x="596" y="222" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="10.5"
+             fill="#59636e">✕ setTimeout</text>
+  <text x="596" y="244" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600"
+        fill="#9a6700">Patch here → every codec missed</text>
+  
+  <line x1="434" y1="176" x2="124" y2="176" stroke="#1f2328"
+        stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#head-fg)"/>
+  <text x="279" y="169" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11"
+        fill="#1f2328" text-anchor="middle">attachedToTarget</text>
+
+  
+  <line x1="124" y1="274" x2="434" y2="274" stroke="#1f2328"
+        stroke-width="1.5" marker-end="url(#head-fg)"/>
+  <text x="279" y="267" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11"
+        fill="#1f2328" text-anchor="middle">Debugger.setInstrumentationBreakpoint</text>
+  
+  <line x1="124" y1="306" x2="434" y2="306" stroke="#0969da"
+        stroke-width="1.5" marker-end="url(#head-accent)"/>
+  <text x="279" y="299" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11"
+        fill="#0969da" text-anchor="middle">Runtime.runIfWaitingForDebugger</text>
+
+  
+  <rect x="576" y="330" width="290" height="96" rx="6" fill="#dafbe1" stroke="#4ac26b"
+        stroke-width="1"/>
+  <text x="596" y="348" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600"
+        fill="#1a7f37">Pause 2 — global is complete</text>
+  <text x="596" y="364" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="10.5"
+             fill="#1a7f37">✓ VideoFrame</text><text x="596" y="379" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="10.5"
+             fill="#1a7f37">✓ VideoDecoder</text><text x="596" y="394" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="10.5"
+             fill="#1a7f37">✓ setTimeout</text>
+  <text x="596" y="416" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600"
+        fill="#1a7f37">Inject here → nothing has run yet</text>
+  
+  <line x1="434" y1="348" x2="124" y2="348" stroke="#1f2328"
+        stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#head-fg)"/>
+  <text x="279" y="341" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11"
+        fill="#1f2328" text-anchor="middle">Debugger.paused (instrumentation)</text>
+
+  
+  <line x1="124" y1="446" x2="756" y2="446" stroke="#1a7f37"
+        stroke-width="1.5" marker-end="url(#head-fg)"/>
+  <text x="440" y="439" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11"
+        fill="#1a7f37" text-anchor="middle">Runtime.evaluate(census)</text>
+  
+  <path d="M762 469 h-26 a5 5 0 0 1 -5 5 v8 a5 5 0 0 1 5 5 h26" fill="none" stroke="#59636e" stroke-width="1.3"
+        marker-end="url(#head-muted)"/>
+  <text x="722" y="483" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11"
+        fill="#59636e" text-anchor="end">worker's own first line runs</text>
 </svg>

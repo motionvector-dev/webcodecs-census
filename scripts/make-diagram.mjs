@@ -1,174 +1,174 @@
 #!/usr/bin/env node
 /**
- * Generates the two-phase injection diagram in light and dark variants.
+ * The injection sequence, as a sequence diagram.
  *
- * Two files rather than one with a CSS media query, because GitHub serves
- * README images through a proxy and the `<picture>` element is the only
- * approach that reliably follows the reader's theme.
+ * Deliberately not a picture of a table: which globals exist at each pause is
+ * already a markdown table in the README, where it is searchable, diffable and
+ * readable by a screen reader. What prose handles badly is the control handoff
+ * — that you resume out of one pause directly into a second one — so that is
+ * what this draws and all it draws.
  *
- * Generated rather than hand-drawn so the variants cannot drift apart.
+ * Two files rather than a CSS media query, because GitHub proxies README images
+ * and `<picture>` is the only thing that reliably follows the reader's theme.
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 
-const THEMES = {
+const THEME = {
   light: {
-    bg: 'none',
     fg: '#1f2328',
     muted: '#59636e',
-    line: '#d1d9e0',
-    panel: '#f6f8fa',
-    panelEdge: '#d1d9e0',
-    good: '#1a7f37',
-    bad: '#cf222e',
+    faint: '#d1d9e0',
+    rule: '#8c959f',
     accent: '#0969da',
-    accentSoft: '#ddf4ff',
+    band: '#fff1e5',
+    bandEdge: '#ffb77c',
+    bandText: '#9a6700',
+    ok: '#1a7f37',
+    okBand: '#dafbe1',
+    okEdge: '#4ac26b',
   },
   dark: {
-    bg: 'none',
     fg: '#f0f6fc',
     muted: '#9198a1',
-    line: '#3d444d',
-    panel: '#151b23',
-    panelEdge: '#3d444d',
-    good: '#3fb950',
-    bad: '#f85149',
+    faint: '#2a313c',
+    rule: '#6e7681',
     accent: '#4493f8',
-    accentSoft: '#121d2f',
+    band: '#2b1a10',
+    bandEdge: '#7d4e24',
+    bandText: '#e0a53f',
+    ok: '#3fb950',
+    okBand: '#0f2417',
+    okEdge: '#2b6a37',
   },
 };
 
-const FONT =
-  "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const MONO = "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace";
 
-const W = 900;
-const H = 430;
+const W = 880;
+const H = 500;
 
-/** Globals present at each pause. The whole point of the diagram. */
-const GLOBALS = [
-  ['VideoFrame', true, true],
-  ['AudioData', true, true],
-  ['EncodedVideoChunk', true, true],
-  ['VideoDecoder', false, true],
-  ['VideoEncoder', false, true],
-  ['AudioDecoder', false, true],
-  ['setTimeout', false, true],
-  ['setInterval', false, true],
+// Three lifelines. Chrome sits in the middle because every message crosses it.
+const LANES = [
+  { x: 118, label: 'census driver', sub: 'your process' },
+  { x: 440, label: 'Chrome', sub: 'DevTools Protocol' },
+  { x: 762, label: 'worker', sub: 'global scope' },
 ];
 
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const TOP = 78; // where lifelines begin
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function panel(t, x, y, w, h, title, subtitle, tone) {
-  const edge = tone ?? t.panelEdge;
+function arrow(t, fromLane, toLane, y, label, opts = {}) {
+  const x1 = LANES[fromLane].x;
+  const x2 = LANES[toLane].x;
+  const dir = x2 > x1 ? 1 : -1;
+  const pad = 6 * dir;
+  const dash = opts.dashed ? ' stroke-dasharray="5 4"' : '';
+  const colour = opts.colour ?? t.fg;
   return `
-  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8"
-        fill="${t.panel}" stroke="${edge}" stroke-width="1.5"/>
-  <text x="${x + 16}" y="${y + 26}" font-family="${FONT}" font-size="14"
-        font-weight="600" fill="${t.fg}">${esc(title)}</text>
-  <text x="${x + 16}" y="${y + 46}" font-family="${FONT}" font-size="12"
-        fill="${t.muted}">${esc(subtitle)}</text>`;
+  <line x1="${x1 + pad}" y1="${y}" x2="${x2 - pad}" y2="${y}" stroke="${colour}"
+        stroke-width="1.5"${dash} marker-end="url(#head-${opts.marker ?? 'fg'})"/>
+  <text x="${(x1 + x2) / 2}" y="${y - 7}" font-family="${MONO}" font-size="11"
+        fill="${colour}" text-anchor="middle">${esc(label)}</text>`;
 }
 
-function globalsList(t, x, y, index) {
-  return GLOBALS.map(([name, atPause, atScript], i) => {
-    const present = index === 0 ? atPause : atScript;
-    const cy = y + i * 21;
-    const mark = present
-      ? `<path d="M${x} ${cy - 4} l4 4 l7 -8" fill="none" stroke="${t.good}" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>`
-      : `<path d="M${x} ${cy - 7} l10 10 M${x + 10} ${cy - 7} l-10 10" fill="none"
-              stroke="${t.bad}" stroke-width="2" stroke-linecap="round"/>`;
-    return `${mark}
-    <text x="${x + 20}" y="${cy + 4}" font-family="${MONO}" font-size="12.5"
-          fill="${present ? t.fg : t.muted}">${esc(name)}</text>`;
-  }).join('');
+/**
+ * A self-call on one lifeline: something Chrome or the worker does alone.
+ * Notes on the rightmost lane draw inward, or the label runs off the canvas.
+ */
+function selfNote(t, lane, y, label, side = 'right') {
+  const x = LANES[lane].x;
+  const d = side === 'right' ? 1 : -1;
+  const loop = `M${x} ${y - 9} h${26 * d} a5 5 0 0 1 ${5 * d} 5 v8 a5 5 0 0 1 ${-5 * d} 5 h${-26 * d}`;
+  return `
+  <path d="${loop}" fill="none" stroke="${t.muted}" stroke-width="1.3"
+        marker-end="url(#head-muted)"/>
+  <text x="${x + 40 * d}" y="${y + 5}" font-family="${SANS}" font-size="11"
+        fill="${t.muted}" text-anchor="${side === 'right' ? 'start' : 'end'}">${esc(label)}</text>`;
+}
+
+function band(t, y, h, title, chips, verdict, tone) {
+  const bg = tone === 'ok' ? t.okBand : t.band;
+  const edge = tone === 'ok' ? t.okEdge : t.bandEdge;
+  const ink = tone === 'ok' ? t.ok : t.bandText;
+  const chipRow = chips
+    .map(([name, present], i) => {
+      const cx = 596 + i * 0; // laid out vertically to stay legible
+      void cx;
+      return `<text x="596" y="${y + 34 + i * 15}" font-family="${MONO}" font-size="10.5"
+             fill="${present ? ink : t.muted}">${present ? '✓' : '✕'} ${esc(name)}</text>`;
+    })
+    .join('');
+  return `
+  <rect x="576" y="${y}" width="290" height="${h}" rx="6" fill="${bg}" stroke="${edge}"
+        stroke-width="1"/>
+  <text x="596" y="${y + 18}" font-family="${SANS}" font-size="11.5" font-weight="600"
+        fill="${ink}">${esc(title)}</text>
+  ${chipRow}
+  <text x="596" y="${y + h - 10}" font-family="${SANS}" font-size="11" font-weight="600"
+        fill="${ink}">${esc(verdict)}</text>`;
 }
 
 function svg(t) {
+  const lifelines = LANES.map(
+    (l, i) => `
+  <text x="${l.x}" y="34" font-family="${SANS}" font-size="12.5" font-weight="600"
+        fill="${t.fg}" text-anchor="middle">${esc(l.label)}</text>
+  <text x="${l.x}" y="50" font-family="${SANS}" font-size="10.5"
+        fill="${t.muted}" text-anchor="middle">${esc(l.sub)}</text>
+  <line x1="${l.x}" y1="${i === 2 ? 140 : TOP}" x2="${l.x}" y2="${H - 26}" stroke="${t.faint}"
+        stroke-width="1.5" stroke-dasharray="3 5"/>`,
+  ).join('');
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img"
-     aria-label="Two-phase injection: at the auto-attach pause a worker has frame types but no codecs or timers; at the beforeScriptExecution pause it has everything, still before the worker's own code runs.">
-  <rect width="${W}" height="${H}" fill="${t.bg}"/>
-
-  <text x="0" y="18" font-family="${FONT}" font-size="15" font-weight="600" fill="${t.fg}">
-    Getting instrumentation into a worker before its first line
-  </text>
-  <text x="0" y="38" font-family="${FONT}" font-size="12.5" fill="${t.muted}">
-    A dedicated worker's global is only half built when Chrome first pauses it.
-  </text>
-
-  <!-- timeline -->
-  <line x1="30" y1="72" x2="${W - 30}" y2="72" stroke="${t.line}" stroke-width="2"/>
-  ${[
-    [30, 'new Worker()'],
-    [300, 'auto-attach pause'],
-    [600, 'beforeScriptExecution'],
-    [W - 30, 'worker code runs'],
-  ]
-    .map(([cx, label], i) => {
-      const isPause = i === 1 || i === 2;
-      return `
-  <circle cx="${cx}" cy="72" r="${isPause ? 7 : 5}"
-          fill="${isPause ? t.accent : t.muted}"/>
-  <text x="${cx}" y="${i === 3 ? 60 : 56}" font-family="${FONT}" font-size="12"
-        font-weight="${isPause ? 600 : 400}"
-        fill="${isPause ? t.accent : t.muted}"
-        text-anchor="${i === 0 ? 'start' : i === 3 ? 'end' : 'middle'}">${esc(label)}</text>`;
-    })
-    .join('')}
-
-  ${panel(t, 170, 100, 260, 290, 'Phase 1 — too early', 'Target.setAutoAttach, waitForDebuggerOnStart', t.bad)}
-  ${globalsList(t, 190, 165, 0)}
-  <text x="190" y="360" font-family="${FONT}" font-size="11.5" fill="${t.bad}">
-    Patch here and every codec is missed.
-  </text>
-
-  ${panel(t, 470, 100, 260, 290, 'Phase 2 — complete, still early', 'Debugger.setInstrumentationBreakpoint', t.good)}
-  ${globalsList(t, 490, 165, 1)}
-  <text x="490" y="360" font-family="${FONT}" font-size="11.5" fill="${t.good}">
-    Inject here. Nothing has run yet.
-  </text>
-
-  <!-- resume arrow between the two -->
-  <path d="M436 245 L462 245" stroke="${t.accent}" stroke-width="2" fill="none"
-        marker-end="url(#arrow-${t.fg.replace('#', '')})"/>
+     aria-label="Sequence diagram. The driver arms auto-attach; Chrome pauses the new worker before its first line, but the worker global is incomplete there — codecs and timers do not exist yet. The driver sets a beforeScriptExecution breakpoint and resumes, landing in a second pause where the global is complete and the worker's own code still has not run. The census is evaluated there, then execution resumes.">
   <defs>
-    <marker id="arrow-${t.fg.replace('#', '')}" viewBox="0 0 10 10" refX="8" refY="5"
-            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="${t.accent}"/>
+    <marker id="head-fg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="${t.fg}"/>
+    </marker>
+    <marker id="head-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="${t.muted}"/>
+    </marker>
+    <marker id="head-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="${t.accent}"/>
     </marker>
   </defs>
-  <text x="449" y="236" font-family="${FONT}" font-size="10.5" fill="${t.accent}"
-        text-anchor="middle">resume</text>
 
-  <rect x="760" y="100" width="140" height="290" rx="8" fill="${t.accentSoft}"
-        stroke="${t.accent}" stroke-width="1"/>
-  <text x="774" y="126" font-family="${FONT}" font-size="12.5" font-weight="600"
-        fill="${t.fg}">Why it matters</text>
-  ${[
-    'Decoders usually',
-    'live in workers.',
-    '',
-    'Page-level',
-    'patching cannot',
-    'reach them at all.',
-    '',
-    'Miss them and the',
-    'tool reports "no',
-    'leaks" for an app',
-    'losing every frame.',
-  ]
-    .map(
-      (line, i) =>
-        `<text x="774" y="${152 + i * 17}" font-family="${FONT}" font-size="11.5" fill="${t.muted}">${esc(line)}</text>`,
-    )
-    .join('')}
+  <text x="0" y="16" font-family="${SANS}" font-size="14" font-weight="600" fill="${t.fg}">
+    Reaching a worker before its first line takes two pauses, not one
+  </text>
+
+  ${lifelines}
+
+  ${arrow(t, 0, 1, 100, 'Target.setAutoAttach { waitForDebuggerOnStart }')}
+  ${selfNote(t, 1, 130, 'page calls new Worker()')}
+
+  ${band(t, 158, 96, 'Pause 1 — global is half built', [
+    ['VideoFrame', true],
+    ['VideoDecoder', false],
+    ['setTimeout', false],
+  ], 'Patch here → every codec missed', 'warn')}
+  ${arrow(t, 1, 0, 176, 'attachedToTarget', { dashed: true })}
+
+  ${arrow(t, 0, 1, 274, 'Debugger.setInstrumentationBreakpoint')}
+  ${arrow(t, 0, 1, 306, 'Runtime.runIfWaitingForDebugger', { colour: t.accent, marker: 'accent' })}
+
+  ${band(t, 330, 96, 'Pause 2 — global is complete', [
+    ['VideoFrame', true],
+    ['VideoDecoder', true],
+    ['setTimeout', true],
+  ], 'Inject here → nothing has run yet', 'ok')}
+  ${arrow(t, 1, 0, 348, 'Debugger.paused (instrumentation)', { dashed: true })}
+
+  ${arrow(t, 0, 2, 446, 'Runtime.evaluate(census)', { colour: t.ok, marker: 'fg' })}
+  ${selfNote(t, 2, 478, "worker's own first line runs", 'left')}
 </svg>
 `;
 }
 
 mkdirSync('docs', { recursive: true });
-for (const [name, theme] of Object.entries(THEMES)) {
-  writeFileSync(`docs/injection-${name}.svg`, svg(theme));
+for (const [name, t] of Object.entries(THEME)) {
+  writeFileSync(`docs/injection-${name}.svg`, svg(t));
   console.log(`docs/injection-${name}.svg`);
 }

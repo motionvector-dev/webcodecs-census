@@ -42,6 +42,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The injection diagram is a sequence diagram rather than a picture of a table.
+  The previous one drew the same ✓/✗ grid the README already carries in
+  markdown, which is searchable, diffable and readable by a screen reader; what
+  it did not show was the control handoff, which is the part prose handles
+  badly.
 - Tests no longer bind fixed debugging ports, and pass `--no-sandbox` under CI.
 
 ### Fixed
