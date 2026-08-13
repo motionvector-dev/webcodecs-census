@@ -18,7 +18,7 @@ const THEME = {
   light: {
     fg: '#1f2328',
     muted: '#59636e',
-    faint: '#d1d9e0',
+    faint: '#8c959f',
     rule: '#8c959f',
     accent: '#0969da',
     band: '#fff1e5',
@@ -31,7 +31,7 @@ const THEME = {
   dark: {
     fg: '#f0f6fc',
     muted: '#9198a1',
-    faint: '#2a313c',
+    faint: '#7d8590',
     rule: '#6e7681',
     accent: '#4493f8',
     band: '#2b1a10',
@@ -47,7 +47,7 @@ const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-s
 const MONO = "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace";
 
 const W = 880;
-const H = 500;
+const H = 552;
 
 // Three lifelines. Chrome sits in the middle because every message crosses it.
 const LANES = [
@@ -84,7 +84,7 @@ function selfNote(t, lane, y, label, side = 'right') {
   return `
   <path d="${loop}" fill="none" stroke="${t.muted}" stroke-width="1.3"
         marker-end="url(#head-muted)"/>
-  <text x="${x + 40 * d}" y="${y + 5}" font-family="${SANS}" font-size="11"
+  <text x="${x + 40 * d}" y="${y + 5}" font-family="${SANS}" font-size="11.5"
         fill="${t.muted}" text-anchor="${side === 'right' ? 'start' : 'end'}">${esc(label)}</text>`;
 }
 
@@ -96,7 +96,7 @@ function band(t, y, h, title, chips, verdict, tone) {
     .map(([name, present], i) => {
       const cx = 596 + i * 0; // laid out vertically to stay legible
       void cx;
-      return `<text x="596" y="${y + 34 + i * 15}" font-family="${MONO}" font-size="10.5"
+      return `<text x="596" y="${y + 34 + i * 15}" font-family="${MONO}" font-size="11.5"
              fill="${present ? ink : t.muted}">${present ? '✓' : '✕'} ${esc(name)}</text>`;
     })
     .join('');
@@ -115,10 +115,10 @@ function svg(t) {
     (l, i) => `
   <text x="${l.x}" y="34" font-family="${SANS}" font-size="12.5" font-weight="600"
         fill="${t.fg}" text-anchor="middle">${esc(l.label)}</text>
-  <text x="${l.x}" y="50" font-family="${SANS}" font-size="10.5"
+  <text x="${l.x}" y="50" font-family="${SANS}" font-size="11.5"
         fill="${t.muted}" text-anchor="middle">${esc(l.sub)}</text>
   <line x1="${l.x}" y1="${i === 2 ? 140 : TOP}" x2="${l.x}" y2="${H - 26}" stroke="${t.faint}"
-        stroke-width="1.5" stroke-dasharray="3 5"/>`,
+        stroke-width="1.75" stroke-dasharray="5 4"/>`,
   ).join('');
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img"
@@ -132,6 +132,9 @@ function svg(t) {
     </marker>
     <marker id="head-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
       <path d="M0 0 L10 5 L0 10 z" fill="${t.accent}"/>
+    </marker>
+    <marker id="head-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="${t.ok}"/>
     </marker>
   </defs>
 
@@ -161,8 +164,10 @@ function svg(t) {
   ], 'Inject here → nothing has run yet', 'ok')}
   ${arrow(t, 1, 0, 348, 'Debugger.paused (instrumentation)', { dashed: true })}
 
-  ${arrow(t, 0, 2, 446, 'Runtime.evaluate(census)', { colour: t.ok, marker: 'fg' })}
-  ${selfNote(t, 2, 478, "worker's own first line runs", 'left')}
+  ${arrow(t, 0, 1, 448, 'Runtime.evaluate(census)', { colour: t.ok, marker: 'ok' })}
+  ${arrow(t, 1, 2, 476, 'evaluated in the worker context', { colour: t.ok, marker: 'ok' })}
+  ${arrow(t, 0, 1, 508, 'Debugger.resume', { colour: t.accent, marker: 'accent' })}
+  ${selfNote(t, 2, 536, "worker's own first line runs", 'left')}
 </svg>
 `;
 }
