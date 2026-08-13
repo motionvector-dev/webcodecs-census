@@ -26,7 +26,7 @@ jobs:
       # reads it as "authentication is configured" and never starts the OIDC
       # exchange, failing with ENEEDAUTH. registry.npmjs.org is the default
       # anyway, so the line buys nothing and costs the whole mechanism.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
