@@ -10,7 +10,9 @@
     "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "release": "npm run preflight && npm run build && npm test && npm publish -w @motionvector/webcodecs-census && npm publish -w @motionvector/webcodecs-census-cdp && npm publish -w @motionvector/webcodecs-census-mcp",
-    "preflight": "node scripts/preflight.mjs"
+    "preflight": "node scripts/preflight.mjs",
+    "build:extension": "cd extension && node make-icons.mjs && node build.mjs",
+    "build:all": "npm run build && npm run build:extension"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

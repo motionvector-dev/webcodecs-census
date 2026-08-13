@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import { attach, launchChrome } from '../packages/cdp/dist/index.js';
 import { checkLeaks } from '../packages/core/dist/index.js';
-import { serveFixtures, findChrome, waitFor } from './helpers.mjs';
+import { serveFixtures, findChrome, waitFor, ciArgs } from './helpers.mjs';
 
 const chromePath = findChrome();
 
@@ -23,7 +23,7 @@ describe('decoded frames', { skip: chromePath ? false : 'no Chrome for Testing f
 
   before(async () => {
     fixtures = await serveFixtures();
-    chrome = await launchChrome({ executablePath: chromePath, port: 9334 });
+    chrome = await launchChrome({ executablePath: chromePath, args: ciArgs() });
     session = await attach({ browserURL: chrome.browserURL, install: { sampleIntervalMs: 100 } });
     await session.navigate(fixtures.origin + '/roundtrip.html');
 

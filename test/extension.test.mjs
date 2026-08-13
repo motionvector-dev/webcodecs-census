@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 
 import { CdpClient, findPageTarget, launchChrome } from '../packages/cdp/dist/index.js';
-import { serveFixtures, findChrome, waitFor } from './helpers.mjs';
+import { serveFixtures, findChrome, waitFor, ciArgs } from './helpers.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXT = join(HERE, '../extension/dist');
@@ -31,8 +31,7 @@ describe('extension patch mode', { skip }, () => {
     fixtures = await serveFixtures();
     chrome = await launchChrome({
       executablePath: chromePath,
-      port: 9335,
-      args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
+      args: [...ciArgs(), `--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
     });
     const target = await findPageTarget(chrome.browserURL);
     client = await CdpClient.connect(target.webSocketDebuggerUrl);

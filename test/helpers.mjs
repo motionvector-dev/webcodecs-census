@@ -110,6 +110,12 @@ export async function serveFile(path, contentType = 'video/mp4') {
   };
 }
 
+/**
+ * Chrome's sandbox needs privileges a CI container usually will not grant, and
+ * the failure is an opaque early exit rather than a message about sandboxing.
+ */
+export const ciArgs = () => (process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : []);
+
 export const waitFor = async (fn, { timeoutMs = 5000, everyMs = 100 } = {}) => {
   const deadline = Date.now() + timeoutMs;
   for (;;) {

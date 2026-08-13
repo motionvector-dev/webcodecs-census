@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly. Chrome stable ships roughly monthly, so this catches a behaviour
+    # change within days of release rather than whenever someone next builds.
+    - cron: '0 6 * * 1'
+
+jobs:
+  test:
+    name: test (Chrome ${{ matrix.chrome }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The version every claim in the README was measured against. Pinned so
+        # a Chrome release cannot silently change what this project asserts.
+        chrome: ['151.0.7922.71']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chrome ${{ matrix.chrome }}
+        run: |
+          # Prints "chrome@<version> <path>"; the path is the last field.
+          OUT=$(npx --yes @puppeteer/browsers install "chrome@${{ matrix.chrome }}")
+          echo "$OUT"
+          echo "CHROME_PATH=${OUT##* }" >> "$GITHUB_ENV"
+
+      - run: npm run build:all
+
+      - name: Test
+        run: npm test
+
+  drift:
+    name: drift check (Chrome stable)
+    # Separate from `test` on purpose: a Chrome release changing behaviour is
+    # something to learn about, not a reason to block an unrelated pull request.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chrome stable
+        run: |
+          OUT=$(npx --yes @puppeteer/browsers install chrome@stable)
+          echo "$OUT"
+          echo "CHROME_PATH=${OUT##* }" >> "$GITHUB_ENV"
+          echo "CHROME_VERSION=$(echo "$OUT" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - run: npm run build:all
+
+      - name: Test against Chrome stable
+        run: npm test
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::warning title=Chrome stable drift::${CHROME_VERSION} behaves differently from the pinned build."
+          echo "The platform-assumptions test prints what it measured at each worker pause point."
+          echo "Injection depends on undocumented behaviour: workers pause before their first line,"
+          echo "the beforeScriptExecution breakpoint exists, and codecs are absent at the earlier pause."
+          echo "A change there is a heads-up, not necessarily a defect — read the measurement first."

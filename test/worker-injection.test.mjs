@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import { attach, launchChrome } from '../packages/cdp/dist/index.js';
 import { checkLeaks, summarize } from '../packages/core/dist/index.js';
-import { serveFixtures, findChrome, waitFor } from './helpers.mjs';
+import { serveFixtures, findChrome, waitFor, ciArgs } from './helpers.mjs';
 
 const chromePath = findChrome();
 
@@ -22,7 +22,7 @@ describe('worker injection over CDP', { skip: chromePath ? false : 'no Chrome fo
 
   before(async () => {
     fixtures = await serveFixtures();
-    chrome = await launchChrome({ executablePath: chromePath, port: 9333 });
+    chrome = await launchChrome({ executablePath: chromePath, args: ciArgs() });
     session = await attach({
       browserURL: chrome.browserURL,
       install: { sampleIntervalMs: 100, keepSamples: 100 },
