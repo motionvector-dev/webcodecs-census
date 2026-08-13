@@ -9,7 +9,8 @@
     "build": "npm run build -w @motionvector/webcodecs-census && npm run build -w @motionvector/webcodecs-census-cdp && npm run build -w @motionvector/webcodecs-census-mcp",
     "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "release": "npm run build && npm test && npm publish -w @motionvector/webcodecs-census && npm publish -w @motionvector/webcodecs-census-cdp && npm publish -w @motionvector/webcodecs-census-mcp"
+    "release": "npm run preflight && npm run build && npm test && npm publish -w @motionvector/webcodecs-census && npm publish -w @motionvector/webcodecs-census-cdp && npm publish -w @motionvector/webcodecs-census-mcp",
+    "preflight": "node scripts/preflight.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
