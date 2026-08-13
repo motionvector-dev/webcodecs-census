@@ -28,7 +28,11 @@ export function respondToCollectRequests(): void {
           mode: 'patch',
         },
       },
-      '*',
+      // Same-window delivery, so this does not cross an origin either way — but
+      // naming the origin keeps the census out of any wider postMessage plumbing
+      // a page happens to have. Note the API is a page global regardless: any
+      // script in the document can call it directly.
+      location.origin,
     );
   });
 }

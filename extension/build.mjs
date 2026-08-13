@@ -20,7 +20,7 @@ await writeFile(
 );
 
 for (const f of ['manifest.json']) await cp(f, `dist/${f}`);
-for (const f of ['background.js', 'content.js', 'popup.html', 'popup.js']) {
+for (const f of ['background.js', 'content.js', 'popup.html', 'popup.js', 'sites.js']) {
   await cp(`src/${f}`, `dist/src/${f}`);
 }
 await cp('icons', 'dist/icons', { recursive: true }).catch(() => {});

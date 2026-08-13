@@ -1,17 +1,27 @@
 const out = document.getElementById('out');
 const modeLine = document.getElementById('mode');
 const toggle = document.getElementById('toggle');
+const siteBtn = document.getElementById('site');
 
-const tabId = (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
+const tab = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+const tabId = tab?.id;
+const origin = (() => {
+  try {
+    const u = new URL(tab.url);
+    return /^https?:$/.test(u.protocol) ? u.origin : null;
+  } catch {
+    return null;
+  }
+})();
 
-const ask = (msg) => chrome.runtime.sendMessage({ ...msg, tabId });
+const ask = (msg) => chrome.runtime.sendMessage({ ...msg, tabId, origin });
 
 function render(result) {
   if (!result?.censuses?.length) {
     out.textContent =
       'No instrumented context answered.\n\n' +
-      'The page may have loaded before the extension, or it may not use WebCodecs. ' +
-      'Reload the tab, then snapshot again.';
+      'Either this site is not enabled, or the page loaded before it was. ' +
+      'Enable the site, then reload the tab.';
     return;
   }
 
@@ -55,20 +65,64 @@ function render(result) {
 }
 
 async function refresh() {
-  const { exact } = (await ask({ type: 'mode:status' })) ?? {};
-  modeLine.textContent = exact
+  const status = (await ask({ type: 'mode:status' })) ?? {};
+
+  if (!origin) {
+    siteBtn.disabled = true;
+    siteBtn.textContent = 'Not a web page';
+    modeLine.textContent = 'This extension only works on http and https pages.';
+    out.textContent = '';
+    return;
+  }
+
+  siteBtn.disabled = false;
+  siteBtn.textContent = status.enabled ? `Disable on ${hostOf(origin)}` : `Enable on ${hostOf(origin)}`;
+  toggle.textContent = status.exact ? 'Disable exact mode' : 'Enable exact mode';
+
+  modeLine.textContent = status.exact
     ? 'Exact mode: workers instrumented before their first line.'
-    : 'Patch mode: best effort. Workers started before the page script, or blocked by CSP, are missed.';
-  toggle.textContent = exact ? 'Disable exact mode' : 'Enable exact mode';
+    : status.enabled
+      ? 'Patch mode: best effort. Workers started before the page script, or blocked by CSP, are missed.'
+      : 'Not instrumenting this site. Nothing is patched until you enable it.';
+
   render(await ask({ type: 'census:get' }));
 }
 
+const hostOf = (o) => {
+  try {
+    return new URL(o).host;
+  } catch {
+    return o;
+  }
+};
+
 document.getElementById('refresh').addEventListener('click', refresh);
 
+siteBtn.addEventListener('click', async () => {
+  const status = (await ask({ type: 'mode:status' })) ?? {};
+  if (status.enabled) {
+    await ask({ type: 'site:disable' });
+    out.textContent = `Stopped instrumenting ${hostOf(origin)} and gave the permission back.`;
+    await refresh();
+    return;
+  }
+
+  // Must be requested from a user gesture in an extension page, so it happens
+  // here rather than in the service worker.
+  const granted = await chrome.permissions.request({ origins: [`${origin}/*`] });
+  if (!granted) {
+    out.textContent = 'Permission declined, so nothing was changed.';
+    return;
+  }
+  await ask({ type: 'site:enable' });
+  out.textContent = `Instrumenting ${hostOf(origin)}. Reload the tab so the census is in place before the app starts.`;
+  await refresh();
+});
+
 toggle.addEventListener('click', async () => {
-  const { exact } = (await ask({ type: 'mode:status' })) ?? {};
-  await ask({ type: exact ? 'mode:exact:off' : 'mode:exact:on' });
-  if (!exact) {
+  const status = (await ask({ type: 'mode:status' })) ?? {};
+  await ask({ type: status.exact ? 'mode:exact:off' : 'mode:exact:on' });
+  if (!status.exact) {
     out.textContent = 'Exact mode on. Reload the tab so workers are caught at startup.';
     modeLine.textContent = '';
     toggle.textContent = 'Disable exact mode';

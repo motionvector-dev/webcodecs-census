@@ -8,7 +8,8 @@
     width: 380px; margin: 0; padding: 12px;
   }
   h1 { font-size: 13px; margin: 0 0 8px; }
-  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  button[disabled] { opacity: .5; cursor: default; }
   button {
     font: inherit; padding: 4px 10px; border-radius: 6px;
     border: 1px solid currentColor; background: transparent; cursor: pointer;
@@ -24,6 +25,7 @@
 <body>
   <h1>WebCodecs Census</h1>
   <div class="row">
+    <button id="site">Enable on this site</button>
     <button id="refresh">Snapshot</button>
     <button id="toggle">Enable exact mode</button>
   </div>

@@ -13,10 +13,11 @@
   "permissions": [
     "scripting",
     "storage",
+    "activeTab",
     "debugger"
   ],
   "optional_host_permissions": [
-    "<all_urls>"
+    "*://*/*"
   ],
   "background": {
     "service_worker": "src/background.js",
@@ -25,26 +26,5 @@
   "action": {
     "default_popup": "src/popup.html",
     "default_title": "WebCodecs Census"
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["src/shim.global.js"],
-      "run_at": "document_start",
-      "all_frames": true,
-      "world": "MAIN"
-    },
-    {
-      "matches": ["<all_urls>"],
-      "js": ["src/content.js"],
-      "run_at": "document_start",
-      "all_frames": true
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["src/shim.global.js"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }

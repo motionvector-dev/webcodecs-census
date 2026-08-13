@@ -14,6 +14,7 @@
  */
 
 import { SHIM_SOURCE } from './shim-source.js';
+import { enableSite, disableSite, listSites, reconcile } from './sites.js';
 
 const attached = new Map(); // tabId -> { workers: Map<sessionId, info>, pending: Map }
 
@@ -60,6 +61,13 @@ export async function disableExactMode(tabId) {
     /* already gone */
   }
 }
+
+chrome.runtime.onInstalled.addListener(() => void reconcile());
+chrome.runtime.onStartup.addListener(() => void reconcile());
+
+// Revoking access from Chrome's own settings must stop the content scripts too,
+// not just remove the permission.
+chrome.permissions.onRemoved.addListener(() => void reconcile());
 
 chrome.debugger.onEvent.addListener(async (source, method, params) => {
   const state = attached.get(source.tabId);
@@ -162,8 +170,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse(await chrome.tabs.sendMessage(tabId, { type: 'census:collect' }).catch(() => null));
         }
         break;
-      case 'mode:status':
-        sendResponse({ exact: attached.has(tabId) });
+      case 'mode:status': {
+        const sites = await listSites();
+        sendResponse({ exact: attached.has(tabId), sites, origin: msg.origin, enabled: sites.includes(msg.origin) });
+        break;
+      }
+      case 'site:enable':
+        await enableSite(msg.origin);
+        sendResponse({ ok: true });
+        break;
+      case 'site:disable':
+        await disableSite(msg.origin);
+        sendResponse({ ok: true });
         break;
       default:
         sendResponse(null);

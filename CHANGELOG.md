@@ -40,8 +40,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a page snapshot does not cover worker isolates, and a frame collected without
   `close()` is gone from the heap before it could be captured.
 
+- `SECURITY.md`, which separates the capabilities that are deliberate — patching
+  globals, retaining stacks, `webcodecs_evaluate` running arbitrary JavaScript,
+  unauthenticated CDP ports — from the things that would be defects, so a real
+  report is easier to recognise. Plus `CONTRIBUTING.md`, `CODEOWNERS` and
+  Dependabot.
+
 ### Changed
 
+- **The extension no longer instruments anything until you enable a site.** It
+  previously declared content scripts on `<all_urls>`, so installing it patched
+  the WebCodecs globals and exposed the census API in the main world of every
+  page the user visited — for a tool you need on one app. It now ships no host
+  permissions, requests a single origin when you opt in, registers that origin's
+  content script at runtime, and hands the permission back when you opt out.
 - The injection diagram is a sequence diagram rather than a picture of a table.
   The previous one drew the same ✓/✗ grid the README already carries in
   markdown, which is searchable, diffable and readable by a screen reader; what
@@ -55,6 +67,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   64 kB stderr buffer within seconds on Linux and then blocks forever; macOS is
   quiet enough that it never appeared locally. The first CI run hung with no
   output at all.
+- `pageBridge` posted the census with a `'*'` target origin. Same-window
+  delivery means this crossed no origin boundary, and the API is a page global
+  regardless — hygiene rather than a hole, but named now.
 - `kill()` removed the profile directory in the same breath as signalling
   Chrome, racing the helper processes still writing there and failing with
   `ENOTEMPTY` — which surfaced as a stalled test file rather than anything

@@ -187,21 +187,28 @@ Media elements are tracked because Chrome caps `WebMediaPlayer`s per frame (75 d
 
 ## Browser extension
 
+**Nothing is instrumented until you enable a specific site.** The extension ships
+no host permissions and no declared content scripts; enabling a site requests
+that one origin, registers a `document_start` content script for it, and
+disabling hands the permission back. A leak tool has no business patching
+WebCodecs on every page you visit.
+
 Two modes, because the exact one is not free:
 
 | | Patch mode | Exact mode |
 | --- | --- | --- |
-| Permissions | none beyond the page | `debugger` |
+| Permissions | one origin, granted by you | that, plus `debugger` |
 | Banner | none | "debugging this browser" |
 | Works with DevTools open | yes | no |
 | Workers started before the page script | missed | caught |
 | Workers blocked by `worker-src` CSP | missed (reported) | caught |
 | Codecs inside workers | caught | caught |
 
-Patch mode never fails silently: whatever it could not wrap is listed in the popup and in `problems[]` on the census.
+Patch mode never fails silently: whatever it could not wrap is listed in the
+popup and in `problems[]` on the census.
 
 ```bash
-npm run build && (cd extension && node build.mjs)   # load extension/dist unpacked
+npm run build:all      # then load extension/dist unpacked
 ```
 
 ## What it tracks
@@ -220,6 +227,12 @@ Each live object records how it entered the context:
 **Transfers are accounted for explicitly.** Transferring a `VideoFrame` detaches the sender's handle *without* calling `close()`, and the receiver gets it by structured clone rather than a constructor. Counted naively that is a false leak in the sender and an invisible object in the receiver. The census records a transfer as a distinct fate, and scans incoming messages (bounded depth) to adopt what arrives.
 
 A `FinalizationRegistry` catches the unambiguous case: an object collected by GC that was never closed. That is a leak, not a heuristic.
+
+## Security
+
+The census patches global constructors, keeps allocation stacks in memory, and exposes `window.__webcodecsCensus` to anything in the page. The MCP server runs arbitrary JavaScript in the page under test, and CDP ports are unauthenticated by design. None of that is incidental — see [SECURITY.md](./SECURITY.md) for what is deliberate, what is not, and how to report a problem.
+
+The core makes no network requests of any kind and has no runtime dependencies.
 
 ## Honest limits
 
