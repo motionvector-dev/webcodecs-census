@@ -17,7 +17,7 @@
     "build:diagram": "node scripts/make-diagram.mjs"
   },
   "devDependencies": {
-    "@types/node": "^22.20.1",
+    "@types/node": "^26.2.0",
     "esbuild": "^0.25.0",
     "mediabunny": "^1.53.1",
     "typescript": "^5.7.0"
