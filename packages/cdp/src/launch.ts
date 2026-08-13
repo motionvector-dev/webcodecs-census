@@ -62,9 +62,27 @@ export async function launchChrome(options: LaunchOptions): Promise<LaunchedChro
     { stdio: ['ignore', 'pipe', 'pipe'] },
   );
 
+  // Chrome must never block on a pipe nobody reads. Its stderr fills the 64 kB
+  // buffer within seconds on Linux — quiet on macOS, which is how this survived
+  // local testing and then hung in CI forever with no output. Drain both, and
+  // keep the tail so a startup failure can say why.
+  let tail = '';
+  const drain = (stream: NodeJS.ReadableStream | null) => {
+    stream?.setEncoding('utf8');
+    stream?.on('data', (chunk: string) => {
+      tail = (tail + chunk).slice(-4000);
+    });
+    stream?.on('error', () => {});
+  };
+  drain(proc.stdout);
+  drain(proc.stderr);
+
   let exited: Error | null = null;
   proc.once('exit', (code) => {
-    exited ??= new Error(`Chrome exited with code ${code} before the debugging port opened`);
+    exited ??= new Error(
+      `Chrome exited with code ${code} before the debugging port opened` +
+        (tail.trim() ? `:\n${tail.trim()}` : ''),
+    );
   });
 
   // With port 0 Chrome writes the port it actually chose into the profile.
@@ -92,7 +110,9 @@ export async function launchChrome(options: LaunchOptions): Promise<LaunchedChro
       proc.kill('SIGKILL');
       await rm(profile, { recursive: true, force: true });
       throw new Error(
-        `Chrome did not expose a debugging port in time` + (port ? ` on ${port}` : ''),
+        `Chrome did not expose a debugging port in time` +
+          (port ? ` on ${port}` : '') +
+          (tail.trim() ? `:\n${tail.trim()}` : ''),
       );
     }
     await new Promise((r) => setTimeout(r, 150));
