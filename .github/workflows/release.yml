@@ -19,7 +19,7 @@ jobs:
       CHROME_PIN: '151.0.7922.71'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `registry-url`: it writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`
       # into .npmrc, and with no token that line expands to an empty value. npm
