@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `bin` path in the MCP package dropped its `./` prefix. npm auto-corrected it
+  at publish time and warned; the published package works, but the warning is
+  noise on every release until the source matches what npm wants.
+
 ## [0.2.0] - 2026-08-13
 
 ### Added
