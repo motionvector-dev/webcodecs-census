@@ -189,10 +189,32 @@ A `FinalizationRegistry` catches the unambiguous case: an object collected by GC
 ## Development
 
 ```bash
-npm install && npm run build && npm test
+npm install && npm run build:all && npm test
 ```
 
 Tests drive a real Chrome and assert the things that would otherwise fail silently: that the shim beats a worker's first line, that decoded frames are counted, that a transferred frame is not blamed on the sender, and that patch mode really rewrites `Worker`.
+
+### Releasing
+
+All three packages share one version, because `-cdp` and `-mcp` depend on an
+*exact* version of the core — bump one alone and you publish a package whose
+dependency does not exist.
+
+```bash
+node scripts/version.mjs minor      # or patch / major / an explicit version
+git commit -am "release: v0.2.0" && git tag v0.2.0
+git push origin main --tags
+```
+
+The tag triggers `.github/workflows/release.yml`, which refuses a tag that does
+not match the packages, runs the full browser suite against pinned Chrome, then
+publishes all three in dependency order with npm provenance and opens a GitHub
+Release using that version's `CHANGELOG.md` section, with the packed extension
+attached.
+
+It needs one secret: `NPM_TOKEN`, an npm **automation** token. Classic and
+granular tokens still demand a one-time password, so the publish hangs and
+fails.
 
 ## Prior art
 

@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Publishing is gated on the browser tests. Every guarantee this project makes
+# is about undocumented Chrome behaviour, so a release that skipped them would
+# be shipping an unverified claim.
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release
+      id-token: write # npm provenance
+
+    env:
+      CHROME_PIN: '151.0.7922.71'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Check the tag matches the packages
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          for p in core cdp mcp; do
+            V=$(node -p "require('./packages/$p/package.json').version")
+            if [ "$V" != "$TAG" ]; then
+              echo "::error::Tag is v$TAG but packages/$p is $V. Use 'node scripts/version.mjs $TAG' so every package and cross-dependency moves together."
+              exit 1
+            fi
+          done
+          echo "VERSION=$TAG" >> "$GITHUB_ENV"
+
+      - name: Install Chrome ${{ env.CHROME_PIN }}
+        run: |
+          OUT=$(npx --yes @puppeteer/browsers install "chrome@${CHROME_PIN}")
+          echo "CHROME_PATH=${OUT##* }" >> "$GITHUB_ENV"
+
+      - run: npm run build:all
+
+      - name: Test before publishing
+        run: npm test
+
+      - name: Publish to npm
+        # Order is load-bearing: -cdp and -mcp pin an exact version of the core,
+        # so the core has to resolve on the registry before they are pushed.
+        run: |
+          npm publish -w @motionvector/webcodecs-census --provenance --access public
+          npm publish -w @motionvector/webcodecs-census-cdp --provenance --access public
+          npm publish -w @motionvector/webcodecs-census-mcp --provenance --access public
+        env:
+          # An npm *automation* token. A classic or granular token still prompts
+          # for a one-time password and the publish will hang, then fail.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Package the extension for the Chrome Web Store
+        run: |
+          cd extension/dist && zip -qr "../../webcodecs-census-extension-${VERSION}.zip" .
+
+      - name: Release notes
+        run: node scripts/release-notes.mjs "$VERSION" > RELEASE_NOTES.md
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "v$VERSION" \
+            --notes-file RELEASE_NOTES.md \
+            "webcodecs-census-extension-${VERSION}.zip"
