@@ -60,6 +60,23 @@ The frames that leak in production are not the ones you build with `new VideoFra
 
 The census wraps the `output` callback at construction time. Because there are no application frames above a platform callback, a decoded frame is attributed to **the decoder that produced it** — which is the line you can actually act on. `.clone()` is tracked too: it returns an independent handle needing its own `close()`, and it also bypasses the constructor.
 
+### Why not just take a heap snapshot?
+
+Chrome's [DevTools MCP server](https://github.com/ChromeDevTools/chrome-devtools-mcp) gained heap-snapshot tools for agents in Chrome 151, which is the natural thing to reach for. It cannot answer this question, for three structural reasons rather than one fixable one.
+
+Measured against this repo's own fixture, which leaks five `VideoFrame`s inside a worker:
+
+| | Result |
+| --- | --- |
+| Heap snapshot of the page target | 4 `VideoFrame` nodes, **84 bytes** total |
+| `webcodecs_census` | `VideoFrame: 5`, attributed to the decoder that produced them |
+
+1. **Wrong heap.** A WebCodecs object's resource lives outside the JS heap — the entire reason `close()` exists. The snapshot is measuring JS wrappers, so it understates a frame holding megabytes of GPU memory as tens of bytes.
+2. **Wrong scope.** The leak is in a worker, and a page-target snapshot does not cover worker isolates. You would have to snapshot every worker target separately and would still hit the first reason.
+3. **Wrong question.** A frame collected by GC *without* `close()` is the most definitive leak there is, and it is gone from the heap by the time you could snapshot it. Only a `FinalizationRegistry` sees it, which is what this does.
+
+The two compose rather than compete: several CDP clients can attach to one page at the same time, so an agent can run Chrome's DevTools MCP for JS-heap and performance work and this one for media object lifetimes.
+
 ## Install
 
 ```bash
@@ -267,6 +284,7 @@ Two things it is easy to get wrong, both of which fail as a bare `ENEEDAUTH`:
 - [webgpu_inspector](https://github.com/brendan-duncan/webgpu_inspector) — excellent, actively maintained, and the quality bar for this project. Solves the analogous problem for WebGPU and ships a Claude Code plugin. Does not cover WebCodecs.
 - [Spector.js](https://github.com/BabylonJS/Spector.js) — WebGL. Page-level patching, same worker blind spot.
 - Chrome DevTools Media panel — lists players and logs; does not attribute frame lifetimes.
+- [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) — the official agent surface for DevTools. Strong at JS-heap leaks and performance; blind to resources held outside the JS heap. Runs alongside this one.
 
 ## Licence
 

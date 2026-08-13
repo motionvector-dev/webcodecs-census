@@ -34,6 +34,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   through mediabunny's documented sample-versus-frame ownership split and
   asserts the leak is attributed to `toVideoFrame`, the method whose contract
   was broken.
+- A README section measuring this against Chrome 151's heap-snapshot tools for
+  agents, since that is the first thing a knowledgeable reader will reach for
+  instead. It cannot answer the question: the resource is outside the JS heap,
+  a page snapshot does not cover worker isolates, and a frame collected without
+  `close()` is gone from the heap before it could be captured.
 
 ### Changed
 
