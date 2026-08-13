@@ -20,6 +20,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unrelated pull request.
 - `npm run preflight`, which checks npm login and org membership before a
   release spends a full build-and-test cycle discovering it cannot publish.
+- Publishing over OIDC trusted publishing rather than a long-lived npm token,
+  so nothing durable exists to leak or rotate and provenance is automatic.
+- `scripts/publish.mjs`, which skips any package already on the registry at the
+  version being released, so re-running a release that failed part-way finishes
+  the job instead of aborting on the first "cannot publish over previously
+  published versions".
 
 - `test/mediabunny.test.mjs`, which builds a real MP4 with
   [mediabunny](https://github.com/Vanilagy/mediabunny), decodes it back through

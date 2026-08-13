@@ -235,9 +235,29 @@ publishes all three in dependency order with npm provenance and opens a GitHub
 Release using that version's `CHANGELOG.md` section, with the packed extension
 attached.
 
-It needs one secret: `NPM_TOKEN`, an npm **automation** token. Classic and
-granular tokens still demand a one-time password, so the publish hangs and
-fails.
+**No npm token is involved.** Publishing authenticates with
+[trusted publishing](https://docs.npmjs.com/trusted-publishers/) over OIDC:
+short-lived, workflow-scoped credentials, nothing long-lived to leak or rotate,
+and provenance generated automatically.
+
+It has to be enabled once per package on npmjs.com, under *Settings → Trusted
+publisher*:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | `unfoundbox` |
+| Repository | `webcodecs-census` |
+| Workflow filename | `release.yml` |
+| Environment | *(leave empty)* |
+
+Two things it is easy to get wrong, both of which fail as a bare `ENEEDAUTH`:
+
+- **Do not add `registry-url` to `actions/setup-node`.** It writes an
+  `_authToken=` line into `.npmrc`, and with no token that line is empty — which
+  npm reads as "authentication is configured", so it never starts the OIDC
+  exchange at all.
+- **npm 11.5.1 or later is required**, and Node 22 still ships npm 10. The
+  workflow upgrades npm before publishing.
 
 ## Prior art
 

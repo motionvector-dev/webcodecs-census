@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write # create the GitHub Release
-      id-token: write # npm provenance
+      id-token: write # npm trusted publishing (OIDC) and provenance
 
     env:
       CHROME_PIN: '151.0.7922.71'
@@ -21,11 +21,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `registry-url`: it writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`
+      # into .npmrc, and with no token that line expands to an empty value. npm
+      # reads it as "authentication is configured" and never starts the OIDC
+      # exchange, failing with ENEEDAUTH. registry.npmjs.org is the default
+      # anyway, so the line buys nothing and costs the whole mechanism.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          registry-url: https://registry.npmjs.org
+
+      - name: Use an npm that can do trusted publishing
+        # Node 22 ships npm 10.x; OIDC needs 11.5.1 or later.
+        run: |
+          npm i -g npm@^11
+          npm --version
+
+      - name: Make sure nothing looks like configured auth
+        # Defensive: any leftover _authToken line has the same effect as above.
+        run: |
+          NPMRC="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          [ -f "$NPMRC" ] && sed -i '/_authToken/d' "$NPMRC" || true
+          echo "npmrc after cleanup:"; cat "$NPMRC" 2>/dev/null || echo "(none)"
 
       - run: npm ci
 
@@ -52,20 +69,13 @@ jobs:
         run: npm test
 
       - name: Publish to npm
-        # Order is load-bearing: -cdp and -mcp pin an exact version of the core,
-        # so the core has to resolve on the registry before they are pushed.
-        run: |
-          npm publish -w @motionvector/webcodecs-census --provenance --access public
-          npm publish -w @motionvector/webcodecs-census-cdp --provenance --access public
-          npm publish -w @motionvector/webcodecs-census-mcp --provenance --access public
-        env:
-          # An npm *automation* token. A classic or granular token still prompts
-          # for a one-time password and the publish will hang, then fail.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Authenticated by OIDC, which requires a trusted publisher configured on
+        # npmjs.com for each package: owner unfoundbox, repo webcodecs-census,
+        # workflow release.yml. No long-lived token exists to leak or rotate.
+        run: node scripts/publish.mjs
 
       - name: Package the extension for the Chrome Web Store
-        run: |
-          cd extension/dist && zip -qr "../../webcodecs-census-extension-${VERSION}.zip" .
+        run: cd extension/dist && zip -qr "../../webcodecs-census-extension-${VERSION}.zip" .
 
       - name: Release notes
         run: node scripts/release-notes.mjs "$VERSION" > RELEASE_NOTES.md
@@ -77,4 +87,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "v$VERSION" \
             --notes-file RELEASE_NOTES.md \
-            "webcodecs-census-extension-${VERSION}.zip"
+            "webcodecs-census-extension-${VERSION}.zip" \
+            || gh release upload "$GITHUB_REF_NAME" "webcodecs-census-extension-${VERSION}.zip" --clobber
