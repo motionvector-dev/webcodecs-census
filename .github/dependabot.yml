@@ -1,19 +1,48 @@
+# Dependabot opens pull requests. It never merges them, and it never touches
+# this project's own version — only the dependency ranges in package.json.
+# Releases stay manual: `node scripts/version.mjs` then a tag.
+#
+# Tuned for quiet. One grouped pull request per ecosystem per month, rather than
+# one per package per week: a stream of individual bumps gets skimmed and rubber
+# stamped, which is worse than fewer changes that actually get read. Every one
+# still has to pass the full browser suite before it can be merged.
+#
+# Note this file governs *version* updates only. Dependabot security alerts are
+# a separate repository setting and ignore this schedule — worth enabling, since
+# a known vulnerability should not wait for the monthly slot.
 version: 2
+
 updates:
-  # The core package has no runtime dependencies, so this is almost entirely
-  # about build and test tooling — and about the GitHub Actions in the release
-  # workflow, which is the part with credentials in reach.
+  # The core package has no runtime dependencies at all, so in practice this is
+  # build and test tooling: esbuild, typescript, @types/node, mediabunny.
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore(deps)
+    labels:
+      - dependencies
     groups:
-      dev-dependencies:
-        patterns: ['*']
-        update-types: [minor, patch]
+      npm:
+        # Majors included deliberately. Excluding them means never hearing about
+        # them, and this project's whole premise is that silence is not safety.
+        patterns:
+          - '*'
 
+  # The likelier supply-chain risk: these run in the workflow that publishes,
+  # where a compromised action would have the release credentials in reach.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: ci(actions)
+    labels:
+      - dependencies
+    groups:
+      actions:
+        patterns:
+          - '*'
