@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A README in each published package. `files: ["dist"]` meant the tarballs
+  carried no documentation, so all three npm pages read "This package does not
+  have a README" — an empty page for a tool whose entire pitch is a README.
+  Written per package rather than copying the root one, whose relative image and
+  link paths break outside the repository.
+
 ### Fixed
 
 - `bin` path in the MCP package dropped its `./` prefix. npm auto-corrected it
