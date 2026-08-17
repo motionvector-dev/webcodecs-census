@@ -8,8 +8,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [Unreleased]
-
 ### Fixed
 
 - **`minAgeMs` did not change the verdict.** It filtered the reported
@@ -20,11 +18,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   defect as the `types` filter dropping definitive leaks.
 
   The fix puts the filter where the ages are. A census now reports
-  `liveAges`: the ages of the live objects per type, oldest first, capped at
-  `LIVE_AGES_CAP` (256). The verdict counts the ones at or past the threshold,
-  exactly. The cap is taken from the old end, so "every age we kept clears the
-  bar" answers any tolerance below the cap — a leak of 9000 frames is still
-  reported as 9000, never shrunk to 256.
+  `liveAges` — the ages of the live objects per type, oldest first, capped at
+  `liveAgesCap` (256, carried in the payload so a record says what it is) —
+  and the verdict counts the ones at or past the threshold.
+
+  Keeping the OLDEST is what makes it exact: anything dropped is younger than
+  the youngest age kept, so if some kept age falls below the threshold, nothing
+  dropped can clear it. The one exception is saturation — every kept age clears
+  the bar — where the count becomes a lower bound rather than a total, reported
+  as "at least 256 … 9000 live in total" with the exact total in
+  `liveBounded`. Over-reporting is safe; over-claiming is not.
 
   A census from a shim older than 0.3.0 carries no ages. Rather than silently
   ignoring the option, the report leaves the counts unfiltered — never fewer

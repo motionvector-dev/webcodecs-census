@@ -15,8 +15,18 @@ export interface LeakReport {
    * than an ignored option passing for a clean bill of health.
    */
   minAgeMsApplied: boolean;
-  /** Live objects of the enforced types, summed across contexts. */
+  /**
+   * Live objects of the enforced types, summed across contexts. Age-filtered
+   * when `minAgeMs` asked for it — a lower bound rather than a total for any
+   * type also present in `liveBounded`.
+   */
   live: Partial<Record<TrackedType, number>>;
+  /**
+   * Types where `live` is "at least this many": the age filter saturated the
+   * census cap, so objects past it are of unknown age. The value is the total
+   * live count of that type, which is known exactly.
+   */
+  liveBounded: Partial<Record<TrackedType, number>>;
   /** Live objects of the types `types` left out. Reported, never failed on. */
   unenforcedLive: Partial<Record<TrackedType, number>>;
   /**
@@ -69,18 +79,23 @@ export function totalLive(censuses: ContextCensus[], type: TrackedType): number 
 /**
  * How many live objects of this type are at least `minAgeMs` old.
  *
- * Exact whenever the answer is decidable: the census reports ages oldest
- * first, so a full array of ages that all clear the bar means "at least
- * `LIVE_AGES_CAP`" — decisive against any tolerance below the cap. Past that,
- * and for a census taken before ages existed, it returns the unfiltered count
- * and records why: over-reporting is a false alarm someone can dismiss, while
- * under-reporting is the one failure this tool must never have.
+ * Exact in every case but one. The census keeps the OLDEST ages, so anything
+ * it dropped is younger than the youngest age it kept: if some kept age falls
+ * below the threshold, nothing dropped can clear it, and the count is the
+ * whole truth.
+ *
+ * The exception is saturation — every kept age clears the bar — where the
+ * honest claim is a lower bound rather than a number. The objects beyond the
+ * cap may be younger than the threshold, so counting all of them as old would
+ * over-CLAIM. Fail-loud wants over-reporting, not over-claiming: the count
+ * becomes "at least `cap`", and the total is carried alongside it.
  */
 function countLive(
   c: ContextCensus,
   type: TrackedType,
   minAgeMs: number,
   ignoredAge: string[],
+  bounded: Partial<Record<TrackedType, number>>,
 ): number {
   const total = c.live[type] ?? 0;
   if (!minAgeMs || !total) return total;
@@ -92,9 +107,8 @@ function countLive(
   }
 
   const older = ages.filter((a) => a >= minAgeMs).length;
-  // The cap is only reached by a leak far larger than any tolerance, and every
-  // age we kept is an old one, so "at least this many" is the whole answer.
-  if (older === LIVE_AGES_CAP && total > LIVE_AGES_CAP) return total;
+  const cap = c.liveAgesCap ?? LIVE_AGES_CAP;
+  if (older >= cap && total > older) bounded[type] = (bounded[type] ?? 0) + total;
   return older;
 }
 
@@ -121,13 +135,15 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
   const unenforcedLive: Partial<Record<TrackedType, number>> = {};
   /** Contexts whose census predates `liveAges`, so `minAgeMs` cannot be applied. */
   const ignoredAge: string[] = [];
+  /** Types whose age-filtered count saturated the cap: total live, per type. */
+  const bounded: Partial<Record<TrackedType, number>> = {};
   const collectedUnclosed: Partial<Record<TrackedType, number>> = {};
   const sites: (LeakSite & { context: string })[] = [];
   const overCloses: (OverCloseSite & { context: string })[] = [];
 
   for (const c of censuses) {
     for (const t of TRACKED) {
-      const n = countLive(c, t, minAgeMs, ignoredAge);
+      const n = countLive(c, t, minAgeMs, ignoredAge, bounded);
       if (n) {
         const bucket = enforced.includes(t) ? live : unenforcedLive;
         bucket[t] = (bucket[t] ?? 0) + n;
@@ -157,6 +173,7 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
     ok,
     minAgeMsApplied: minAgeMs > 0 && ignoredAge.length === 0,
     live,
+    liveBounded: bounded,
     unenforcedLive,
     collectedUnclosed,
     enforced,
@@ -175,6 +192,7 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
       allow,
       minAgeMs,
       ignoredAge,
+      bounded,
     ),
   };
 }
@@ -192,6 +210,7 @@ function describe(
   allow: Partial<Record<TrackedType, number>>,
   minAgeMs: number,
   ignoredAge: string[],
+  bounded: Partial<Record<TrackedType, number>>,
 ): string {
   const ageNote = ignoredAge.length
     ? [
@@ -235,10 +254,12 @@ function describe(
     lines.push(`${collectedUnclosed[t]} ${t} garbage collected without close() — definitively leaked.`);
   }
   for (const t of over) {
+    const age = minAgeMs && !ignoredAge.length ? `, at least ${minAgeMs}ms old` : '';
     lines.push(
-      `${live[t]} ${t} still live (allowed ${allow[t] ?? 0}` +
-        (minAgeMs && !ignoredAge.length ? `, at least ${minAgeMs}ms old` : '') +
-        ').',
+      bounded[t]
+        ? `at least ${live[t]} ${t} still live${age} — ${bounded[t]} live in total, ` +
+          `ages past the census cap unknown (allowed ${allow[t] ?? 0}).`
+        : `${live[t]} ${t} still live (allowed ${allow[t] ?? 0}${age}).`,
     );
   }
   lines.push(...ageNote.filter(Boolean));

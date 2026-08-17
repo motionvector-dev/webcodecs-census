@@ -69,11 +69,17 @@ test('the editor releases every frame it decodes', async () => {
 
 `minAgeMs` ignores live objects younger than the threshold — a decode in flight
 is not a leak. It is applied to the verdict, not only to the sites the report
-prints, because the census carries the age of every live object (`liveAges`,
-oldest first, capped at `LIVE_AGES_CAP`). If a census predates 0.3.0 it has no
-ages; the report then leaves the counts unfiltered, sets `minAgeMsApplied` to
-false and names the contexts it could not filter, rather than letting an
-ignored option read as a clean bill of health.
+prints, because the census carries the age of every live object in `liveAges`.
+If a census predates 0.3.0 it has no ages; the report then leaves the counts
+unfiltered, sets `minAgeMsApplied` to false and names the contexts it could not
+filter, rather than letting an ignored option read as a clean bill of health.
+
+The ages are capped, oldest first, and the cap travels in the payload as
+`liveAgesCap`. Keeping the oldest is what makes the count exact: anything
+dropped is younger than the youngest age kept, so it cannot clear a threshold
+the kept ages already fall below. If every kept age *does* clear it, the count
+is honest about being a lower bound — `at least 256 VideoFrame still live …
+9000 live in total` — with the exact total in `liveBounded`.
 
 `types` decides what counts as live too long. It defaults to the frame-like
 types, because a long-lived decoder is normal and a long-lived frame almost

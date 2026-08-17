@@ -114,6 +114,12 @@ export interface ContextCensus {
    * count that ignores the filter it was given.
    */
   liveAges: Partial<Record<TrackedType, number[]>>;
+  /**
+   * The cap `liveAges` was truncated at. Carried in the payload so a saturated
+   * record says what it is without the reader having to know which version of
+   * the shim produced it.
+   */
+  liveAgesCap: number;
   /** Collected by GC without close(). Unambiguous: the resource was held to the end. */
   collectedUnclosed: Partial<Record<TrackedType, number>>;
   /** Closed here but never seen entering — usually a missed receive path. */

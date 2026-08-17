@@ -700,6 +700,7 @@ export function localCensus(): ContextCensus {
     left: { ...state.left },
     live: liveByType(),
     liveAges: liveAgesByType(t),
+    liveAgesCap: LIVE_AGES_CAP,
     collectedUnclosed: { ...state.collectedUnclosed } as Partial<Record<TrackedType, number>>,
     closedUnseen: state.closedUnseen,
     overCloses: [...state.overCloses.values()].sort((a, b) => b.count - a.count),

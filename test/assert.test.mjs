@@ -29,6 +29,7 @@ function census({
     left: {},
     live,
     liveAges,
+    liveAgesCap: 256,
     collectedUnclosed,
     overCloses,
     closedUnseen: 0,
@@ -151,7 +152,7 @@ describe('minAgeMs reaches the verdict, not just the reported sites', () => {
     assert.match(report.message, /minAgeMs=1000 was NOT applied in: main/);
   });
 
-  test('a leak past the age cap is still decided, not guessed', () => {
+  test('a saturated cap is a lower bound, and says so rather than over-claiming', () => {
     const capped = [
       census({
         live: { VideoFrame: 9000 },
@@ -161,8 +162,24 @@ describe('minAgeMs reaches the verdict, not just the reported sites', () => {
       }),
     ];
     const report = checkLeaks(capped, { minAgeMs: 1000 });
-    assert.equal(report.ok, false);
-    assert.equal(report.live.VideoFrame, 9000, 'the cap must not shrink a real leak');
+
+    assert.equal(report.ok, false, 'a 9000-frame leak must fail');
+    assert.equal(report.live.VideoFrame, 256, 'the claim is a bound, not the total');
+    assert.equal(report.liveBounded.VideoFrame, 9000, 'the exact total is still carried');
+    assert.match(report.message, /at least 256 VideoFrame still live/);
+    assert.match(report.message, /9000 live in total/);
+  });
+
+  test('below saturation the count is exact, because the oldest are kept', () => {
+    // 300 live, the oldest 256 reported: 3 clear the bar, so everything the
+    // census dropped is younger than the 4th-oldest and cannot clear it.
+    const ages = [9000, 8000, 7000, ...Array.from({ length: 253 }, () => 10)];
+    const report = checkLeaks(
+      [census({ live: { VideoFrame: 300 }, liveAges: { VideoFrame: ages } })],
+      { minAgeMs: 1000 },
+    );
+    assert.equal(report.live.VideoFrame, 3);
+    assert.equal(report.liveBounded.VideoFrame, undefined, 'not a bound — this one is exact');
   });
 });
 
