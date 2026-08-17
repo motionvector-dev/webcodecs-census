@@ -117,7 +117,7 @@ const TOOLS = [
 ];
 
 const server = new Server(
-  { name: 'webcodecs-census', version: '0.1.0' },
+  { name: 'webcodecs-census', version: '0.2.1' },
   { capabilities: { tools: {} } },
 );
 

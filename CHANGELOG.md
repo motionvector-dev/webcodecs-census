@@ -21,6 +21,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   while an unenforced type holds live objects. The message now names them:
   `No leaks in VideoFrame, AudioData, ImageBitmap — but VideoDecoder=47 still
   live and not enforced.`
+- The version stamp. `VERSION` in the core and the version the MCP server
+  announces were both hardcoded `'0.1.0'`, and `scripts/version.mjs` rewrote
+  neither — so every census payload from 0.2.0 and 0.2.1 carried a version two
+  releases stale. The release script now carries both, and fails loudly rather
+  than silently if either stops matching its pattern.
 - `webcodecs_leak_sites` attributed only the default frame types, so an agent
   asking which line is leaking got nothing back for a codec leak. Attribution
   is not a verdict — it now covers every type unless one is named.
