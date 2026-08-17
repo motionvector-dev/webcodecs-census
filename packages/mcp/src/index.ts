@@ -17,7 +17,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { attach, launchChrome, type CensusSession } from '@motionvector/webcodecs-census-cdp';
-import { checkLeaks, summarize } from '@motionvector/webcodecs-census';
+import { checkLeaks, summarize, type TrackedType } from '@motionvector/webcodecs-census';
 
 let session: CensusSession | null = null;
 let chrome: Awaited<ReturnType<typeof launchChrome>> | null = null;
@@ -179,8 +179,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case 'webcodecs_leak_sites': {
       const s = requireSession();
       const censuses = await s.census();
+      // Attribution, not a verdict: never hide a type the caller did not ask
+      // about, or "which line is leaking" answers nothing for a codec leak.
       const report = checkLeaks(censuses, {
-        types: args.type ? [args.type] : undefined,
+        types: args.type ? [args.type as TrackedType] : 'all',
         minAgeMs: args.minAgeMs,
       });
       const sites = report.sites.slice(0, args.limit ?? 10);
