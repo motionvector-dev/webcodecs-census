@@ -1,6 +1,6 @@
 {
   "name": "@motionvector/webcodecs-census-cdp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Inject the WebCodecs census into a running Chrome — page, iframes and Web Workers — over the DevTools Protocol.",
   "type": "module",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@motionvector/webcodecs-census": "0.2.1"
+    "@motionvector/webcodecs-census": "0.3.0"
   },
   "engines": {
     "node": ">=20"

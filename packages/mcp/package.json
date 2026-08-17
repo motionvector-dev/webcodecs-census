@@ -1,6 +1,6 @@
 {
   "name": "@motionvector/webcodecs-census-mcp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "MCP server for the WebCodecs census — let an agent find leaked VideoFrames, with allocation stacks, without a browser UI in the loop.",
   "type": "module",
   "license": "MIT",
@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@motionvector/webcodecs-census": "0.2.1",
-    "@motionvector/webcodecs-census-cdp": "0.2.1"
+    "@motionvector/webcodecs-census": "0.3.0",
+    "@motionvector/webcodecs-census-cdp": "0.3.0"
   },
   "engines": {
     "node": ">=20"
