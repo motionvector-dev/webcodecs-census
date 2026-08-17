@@ -382,13 +382,20 @@
       bug at different stages.
     </p>
 
-    <h3><code>minAgeMs</code> filters the attribution, not the verdict</h3>
+    <h3>An age filter is exact only up to the census cap</h3>
 
     <p>
-      As of v0.2.1, <code>minAgeMs</code> drops young allocation sites from
-      <code>report.sites</code>. It does not filter <code>report.live</code>, which is what
-      <code>report.ok</code> is computed from. Use <code>allow</code> to tolerate a steady-state
-      pool.
+      <code>minAgeMs</code> decides the verdict as of v0.3.1, using the ages the census carries.
+      Those ages are capped at 256 per type, kept from the oldest end. Below saturation the count
+      is exact; at saturation — every kept age clears the threshold — the report states a lower
+      bound and carries the exact total beside it, because the objects past the cap are of unknown
+      age. It never under-reports, and it never claims more than it knows.
+    </p>
+
+    <p>
+      Before v0.3.1 the option filtered <code>report.sites</code> only, so it changed the printed
+      attribution without changing pass or fail. If you are pinned to an older release, use
+      <code>allow</code> instead.
     </p>
 
     <h3>Chrome, for the driver and the extension</h3>

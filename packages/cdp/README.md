@@ -110,7 +110,10 @@ localhost.
 
 ## Documentation
 
-Full documentation, the extension, and the MCP server:
-**[github.com/motionvector-dev/webcodecs-census](https://github.com/motionvector-dev/webcodecs-census)**
+Full reference, the extension, and the MCP server:
+**[motionvector-dev.github.io/webcodecs-census](https://motionvector-dev.github.io/webcodecs-census/cdp.html)**
+
+Source and issues:
+[github.com/motionvector-dev/webcodecs-census](https://github.com/motionvector-dev/webcodecs-census)
 
 MIT
