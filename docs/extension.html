@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Browser extension — WebCodecs Census</title>
+<meta name="description" content="Patch mode and exact mode in a Chrome extension that instruments nothing until you enable a site.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%235eead4'/%3E%3Cpath d='M4 5h8M4 8h5M4 11h7' stroke='%2304211d' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  // Before first paint, so a chosen theme does not flash the other one.
+  try {
+    var t = localStorage.getItem('wcc-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<style>
+  /* --- Palette ---------------------------------------------------------
+     Light is the bare :root so a page with no theme signal still has one.
+     Dark is defined twice on purpose: once behind prefers-color-scheme for
+     the "System" setting, once behind [data-theme] so the toggle wins. */
+  :root {
+    --ground: #fbfbfa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --ink: #18181b;
+    --ink-2: #3f3f46;
+    --ink-3: #71717a;
+    --accent: #0d7c6d;
+    --accent-ink: #ffffff;
+    --accent-wash: #0d7c6d14;
+    --code-ink: #27272a;
+    --shadow: 0 1px 2px #18181b0f, 0 8px 24px -16px #18181b26;
+    --light-only: block;
+    --dark-only: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #000000;
+      --surface: #050506;
+      --surface-2: #101012;
+      --line: #232327;
+      --line-strong: #34343a;
+      --ink: #f4f4f5;
+      --ink-2: #b8b8c0;
+      --ink-3: #85858f;
+      --accent: #5eead4;
+      --accent-ink: #04211d;
+      --accent-wash: #5eead414;
+      --code-ink: #d8d8e0;
+      --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+      --light-only: none;
+      --dark-only: block;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #000000;
+    --surface: #050506;
+    --surface-2: #101012;
+    --line: #232327;
+    --line-strong: #34343a;
+    --ink: #f4f4f5;
+    --ink-2: #b8b8c0;
+    --ink-3: #85858f;
+    --accent: #5eead4;
+    --accent-ink: #04211d;
+    --accent-wash: #5eead414;
+    --code-ink: #d8d8e0;
+    --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+    --light-only: none;
+    --dark-only: block;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16.5px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "kern" 1;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* --- Header ---------------------------------------------------------- */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header.site .wrap {
+    display: flex; align-items: center; gap: 1rem 1.5rem;
+    flex-wrap: wrap; padding-top: .85rem; padding-bottom: .85rem;
+  }
+  .brand {
+    font-weight: 620; letter-spacing: -.015em; color: var(--ink);
+    text-decoration: none; font-size: .98rem; white-space: nowrap;
+  }
+  .brand span { color: var(--ink-3); font-weight: 400; }
+  nav.site { display: flex; flex-wrap: wrap; gap: .15rem .35rem; margin-right: auto; }
+  nav.site a {
+    color: var(--ink-3); text-decoration: none; font-size: .875rem;
+    padding: .25rem .5rem; border-radius: .35rem; white-space: nowrap;
+  }
+  nav.site a:hover { color: var(--ink); background: var(--surface-2); }
+  nav.site a[aria-current="page"] { color: var(--accent); background: var(--accent-wash); }
+
+  /* --- Theme toggle ---------------------------------------------------- */
+  .theme {
+    display: inline-flex; border: 1px solid var(--line); border-radius: .45rem;
+    overflow: hidden; background: var(--surface);
+  }
+  .theme button {
+    font: inherit; font-size: .74rem; letter-spacing: .02em;
+    padding: .3rem .55rem; border: 0; background: transparent;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .theme button + button { border-left: 1px solid var(--line); }
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); }
+
+  /* --- Typography ------------------------------------------------------ */
+  main { padding: 3rem 0 5rem; }
+  .eyebrow {
+    font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 .75rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 1.3rem + 3vw, 3rem); line-height: 1.08;
+    letter-spacing: -.03em; font-weight: 640; margin: 0 0 1rem;
+  }
+  h2 {
+    font-size: clamp(1.3rem, 1.1rem + .8vw, 1.6rem); line-height: 1.2;
+    letter-spacing: -.02em; font-weight: 620;
+    margin: 3.5rem 0 1rem; padding-top: 1.75rem; border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 1.05rem; letter-spacing: -.01em; font-weight: 620;
+    margin: 2.25rem 0 .6rem;
+  }
+  h4 { font-size: .95rem; font-weight: 620; margin: 1.75rem 0 .4rem; }
+  p, li { color: var(--ink-2); }
+  .lede { font-size: 1.15rem; line-height: 1.55; color: var(--ink); max-width: 46rem; }
+  strong { color: var(--ink); font-weight: 620; }
+  a { color: var(--accent); text-underline-offset: .18em; text-decoration-thickness: 1px; }
+  ul, ol { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  li::marker { color: var(--ink-3); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 3rem 0; }
+
+  /* --- Code ------------------------------------------------------------ */
+  code, pre, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .855em;
+  }
+  :not(pre) > code {
+    background: var(--surface-2); color: var(--code-ink);
+    padding: .12em .35em; border-radius: .3rem;
+    border: 1px solid var(--line);
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: .6rem; padding: 1rem 1.1rem; margin: 1.25rem 0;
+    overflow-x: auto; line-height: 1.55; color: var(--code-ink);
+    box-shadow: var(--shadow);
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  pre.out { background: var(--surface-2); box-shadow: none; color: var(--ink-2); }
+
+  /* --- Tables ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; margin: 1.25rem 0; border-radius: .6rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: .92rem; }
+  th, td {
+    text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--ink-2);
+  }
+  th {
+    color: var(--ink); font-weight: 600; font-size: .8rem;
+    letter-spacing: .04em; text-transform: uppercase;
+    border-bottom-color: var(--line-strong);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { white-space: nowrap; }
+
+  /* --- Callouts -------------------------------------------------------- */
+  .note {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--surface); border-radius: .5rem;
+    padding: .9rem 1.1rem; margin: 1.5rem 0;
+  }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    display: block; font-size: .72rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+    margin-bottom: .35rem;
+  }
+
+  /* --- Card grid ------------------------------------------------------- */
+  .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 2rem 0; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    border: 1px solid var(--line); border-radius: .6rem;
+    background: var(--surface); padding: 1.1rem 1.2rem;
+  }
+  .card:hover { border-color: var(--line-strong); }
+  .card h3 { margin: 0 0 .3rem; font-size: .98rem; color: var(--ink); }
+  .card p { margin: 0; font-size: .9rem; color: var(--ink-3); }
+
+  /* --- Figures --------------------------------------------------------- */
+  figure { margin: 2rem 0; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  img.only-light { display: var(--light-only); }
+  img.only-dark { display: var(--dark-only); }
+  figcaption { font-size: .85rem; color: var(--ink-3); text-align: center; margin-top: .75rem; }
+
+  /* --- Footer ---------------------------------------------------------- */
+  footer.site {
+    border-top: 1px solid var(--line); padding: 2rem 0 3rem;
+    font-size: .88rem; color: var(--ink-3);
+  }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+  footer.site a { color: var(--ink-3); }
+  footer.site a:hover { color: var(--accent); }
+
+  @media (max-width: 46rem) {
+    /* The nav wraps to three rows on a phone. Sticking that to the top would
+       cost a third of the viewport on every page. */
+    header.site { position: static; }
+  }
+  @media (max-width: 40rem) {
+    main { padding-top: 2rem; }
+    h2 { margin-top: 2.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">WebCodecs Census <span>docs</span></a>
+    <nav class="site" aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="api.html">API</a>
+        <a href="cdp.html">CDP driver</a>
+        <a href="mcp.html">MCP server</a>
+        <a href="extension.html" aria-current="page">Extension</a>
+        <a href="ci.html">CI</a>
+        <a href="limits.html">Limits</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="system">System</button>
+      <button type="button" data-theme-set="light">Light</button>
+      <button type="button" data-theme-set="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="eyebrow">Browser extension</p>
+    <h1>Look at a tab by hand</h1>
+    <p class="lede">
+      A Chrome extension for the case where you want to point at a running app rather than drive
+      one from a script. It is not published to the Chrome Web Store — build it and load it
+      unpacked.
+    </p>
+
+    <h2>Nothing is instrumented until you say so</h2>
+
+    <p>
+      The extension ships <strong>no host permissions and no declared content scripts</strong>.
+      Enabling a site requests that one origin, registers a <code>document_start</code> content
+      script for it, and disabling unregisters the script and hands the permission back.
+    </p>
+
+    <p>
+      A leak tool has no business patching WebCodecs on every page you visit. An earlier version
+      declared content scripts on <code>&lt;all_urls&gt;</code>, which patched the globals and
+      exposed the census API in the main world of every page — for a tool you only ever need on
+      one app. That was the wrong default however useful the tool is.
+    </p>
+
+    <p>
+      Revoking the permission from Chrome's own settings also stops the content scripts: the
+      extension reconciles stored origins against granted permissions on install, on startup, and
+      whenever a permission is removed.
+    </p>
+
+    <h2>Two modes</h2>
+
+    <p>The exact one is not free, so you choose.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>Patch mode</th><th>Exact mode</th></tr></thead>
+        <tbody>
+          <tr><td>Permissions</td><td>one origin, granted by you</td><td>that, plus <code>debugger</code></td></tr>
+          <tr><td>Banner</td><td>none</td><td>"debugging this browser"</td></tr>
+          <tr><td>Works with DevTools open</td><td>yes</td><td>no</td></tr>
+          <tr><td>Workers started before the page script</td><td>missed</td><td>caught</td></tr>
+          <tr><td>Workers blocked by <code>worker-src</code> CSP</td><td>missed (reported)</td><td>caught</td></tr>
+          <tr><td>Codecs inside workers</td><td>caught</td><td>caught</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Patch mode</h3>
+
+    <p>
+      The census runs as a <code>world: "MAIN"</code> content script at
+      <code>document_start</code>, and rewrites <code>new Worker(url)</code> to load a small blob
+      that imports the census first and the real worker second. No debugger, no banner, and it
+      coexists with an open DevTools window.
+    </p>
+
+    <p>It is genuinely the weaker half, and it says so rather than pretending otherwise:</p>
+
+    <ul>
+      <li>
+        A page whose CSP omits <code>blob:</code> from <code>worker-src</code>/<code>script-src</code>
+        cannot create a blob worker at all. The patch catches the throw, falls back to the
+        original URL so the app keeps working, and <strong>records the skipped worker with its
+        reason</strong>. The popup lists them.
+      </li>
+      <li>
+        Chrome does not promise a MAIN-world content script beats a page's <em>inline</em>
+        scripts.
+      </li>
+      <li>A worker already running before the patch installs is never covered.</li>
+      <li>
+        <code>self.location</code> inside a wrapped worker becomes the loader blob URL. Workers
+        using <code>import.meta.url</code> are unaffected; workers building paths from
+        <code>self.location</code> are not.
+      </li>
+    </ul>
+
+    <h3>Exact mode</h3>
+
+    <p>
+      The same mechanism as <a href="cdp.html">the CDP driver</a>, driven through
+      <code>chrome.debugger</code> so it works on a tab you are already looking at: auto-attach
+      pauses each worker, a <code>beforeScriptExecution</code> breakpoint gives the second, complete
+      pause, and the census goes in there.
+    </p>
+
+    <p>
+      It costs a "debugging this browser" banner, and it cannot share a tab with an open DevTools
+      window — Chrome allows one debugger client per tab.
+    </p>
+
+    <p>
+      Exact mode injects the plain census rather than the Worker-rewriting build: CDP reaches
+      workers on its own, so the rewrite would be redundant and would change
+      <code>self.location</code> for no gain.
+    </p>
+
+    <h2>Build and load it</h2>
+
+<pre><code>npm install
+npm run build:all      # then load extension/dist unpacked</code></pre>
+
+    <p>
+      In Chrome: <strong>chrome://extensions</strong> &rarr; enable Developer mode &rarr; Load
+      unpacked &rarr; pick <code>extension/dist</code>. Manifest V3, minimum Chrome 116.
+    </p>
+
+    <h2>Using it</h2>
+
+    <ol>
+      <li>Open the app you want to measure and click the extension icon.</li>
+      <li>
+        <strong>Enable on <em>host</em></strong> — Chrome asks for that one origin. Reload the
+        tab, so the census is in place before the app builds its decoders.
+      </li>
+      <li>Optionally <strong>Enable exact mode</strong>, then reload again so workers are caught at startup.</li>
+      <li><strong>Refresh</strong> in the popup to read the census.</li>
+    </ol>
+
+    <p>The popup shows, per context: live counts by type, media elements and how many are stalled,
+      anything garbage collected without <code>close()</code>, the top allocation sites with two
+      stack frames each, and anything the install could not instrument. In patch mode it also
+      reports how many workers were wrapped and which were skipped, with the reason.</p>
+
+    <div class="note">
+      <span class="label">If nothing answers</span>
+      <p>
+        "No instrumented context answered" means either the site is not enabled, or the page
+        loaded before it was. Enable the site, then reload the tab.
+      </p>
+    </div>
+
+    <h2>What it can see about the page</h2>
+
+    <p>
+      The census API is a page global — <code>window.__webcodecsCensus</code> — readable by any
+      script in the document, including third-party ones. Everything it exposes is already
+      derivable in-page, but treat it as visible rather than private, and do not enable it on a
+      page handling data you would not want an analytics script to see. Allocation stacks contain
+      your source URLs, function names and line numbers.
+    </p>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>MIT &middot; MotionVector</span>
+    <a href="https://github.com/motionvector-dev/webcodecs-census">Source on GitHub</a>
+    <a href="https://www.npmjs.com/package/@motionvector/webcodecs-census">npm</a>
+    <a href="https://github.com/motionvector-dev/webcodecs-census/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll('[data-theme-set]');
+    function paint(mode) {
+      buttons.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.themeSet === mode));
+      });
+    }
+    function read() {
+      try { return localStorage.getItem('wcc-theme') || 'system'; } catch (e) { return 'system'; }
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var mode = b.dataset.themeSet;
+        if (mode === 'system') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', mode);
+        try { localStorage.setItem('wcc-theme', mode); } catch (e) {}
+        paint(mode);
+      });
+    });
+    paint(read());
+  })();
+</script>
+</body>
+</html>

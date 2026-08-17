@@ -1,0 +1,61 @@
+name: docs site
+
+# Publishes docs/ to GitHub Pages. The site is plain HTML with inline CSS and
+# no external requests, so there is nothing to build — the job uploads the
+# directory as it stands in the repository.
+#
+# This does nothing until Pages is switched on once, by hand:
+#   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+# Until then the deploy step fails with "Pages is not enabled", which is the
+# intended state for a repository that has not decided to publish yet.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one that is already running: a
+# half-published site is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the site loads nothing from the network
+        # Outbound <a href> links are fine and expected. A remote *asset* is
+        # not: a CDN script, stylesheet, font or image makes the page depend on
+        # someone else's uptime, and it fails quietly for whoever has it cached.
+        # Cheaper to fail here than to find out from a reader.
+        run: |
+          if grep -rInE '(<script[^>]+src=|<link[^>]+href=|<img[^>]+src=|@import|url\()["'"'"']?https?://' \
+               docs --include='*.html' --include='*.css' --include='*.svg'; then
+            echo "::error::docs/ loads an asset from the network. Inline it instead."
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - id: deploy
+        uses: actions/deploy-pages@v5

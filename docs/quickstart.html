@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quickstart — WebCodecs Census</title>
+<meta name="description" content="Install the census and get a first leak report, from your own code, from outside the app, or from an agent.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%235eead4'/%3E%3Cpath d='M4 5h8M4 8h5M4 11h7' stroke='%2304211d' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  // Before first paint, so a chosen theme does not flash the other one.
+  try {
+    var t = localStorage.getItem('wcc-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<style>
+  /* --- Palette ---------------------------------------------------------
+     Light is the bare :root so a page with no theme signal still has one.
+     Dark is defined twice on purpose: once behind prefers-color-scheme for
+     the "System" setting, once behind [data-theme] so the toggle wins. */
+  :root {
+    --ground: #fbfbfa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --ink: #18181b;
+    --ink-2: #3f3f46;
+    --ink-3: #71717a;
+    --accent: #0d7c6d;
+    --accent-ink: #ffffff;
+    --accent-wash: #0d7c6d14;
+    --code-ink: #27272a;
+    --shadow: 0 1px 2px #18181b0f, 0 8px 24px -16px #18181b26;
+    --light-only: block;
+    --dark-only: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #000000;
+      --surface: #050506;
+      --surface-2: #101012;
+      --line: #232327;
+      --line-strong: #34343a;
+      --ink: #f4f4f5;
+      --ink-2: #b8b8c0;
+      --ink-3: #85858f;
+      --accent: #5eead4;
+      --accent-ink: #04211d;
+      --accent-wash: #5eead414;
+      --code-ink: #d8d8e0;
+      --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+      --light-only: none;
+      --dark-only: block;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #000000;
+    --surface: #050506;
+    --surface-2: #101012;
+    --line: #232327;
+    --line-strong: #34343a;
+    --ink: #f4f4f5;
+    --ink-2: #b8b8c0;
+    --ink-3: #85858f;
+    --accent: #5eead4;
+    --accent-ink: #04211d;
+    --accent-wash: #5eead414;
+    --code-ink: #d8d8e0;
+    --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+    --light-only: none;
+    --dark-only: block;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16.5px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "kern" 1;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* --- Header ---------------------------------------------------------- */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header.site .wrap {
+    display: flex; align-items: center; gap: 1rem 1.5rem;
+    flex-wrap: wrap; padding-top: .85rem; padding-bottom: .85rem;
+  }
+  .brand {
+    font-weight: 620; letter-spacing: -.015em; color: var(--ink);
+    text-decoration: none; font-size: .98rem; white-space: nowrap;
+  }
+  .brand span { color: var(--ink-3); font-weight: 400; }
+  nav.site { display: flex; flex-wrap: wrap; gap: .15rem .35rem; margin-right: auto; }
+  nav.site a {
+    color: var(--ink-3); text-decoration: none; font-size: .875rem;
+    padding: .25rem .5rem; border-radius: .35rem; white-space: nowrap;
+  }
+  nav.site a:hover { color: var(--ink); background: var(--surface-2); }
+  nav.site a[aria-current="page"] { color: var(--accent); background: var(--accent-wash); }
+
+  /* --- Theme toggle ---------------------------------------------------- */
+  .theme {
+    display: inline-flex; border: 1px solid var(--line); border-radius: .45rem;
+    overflow: hidden; background: var(--surface);
+  }
+  .theme button {
+    font: inherit; font-size: .74rem; letter-spacing: .02em;
+    padding: .3rem .55rem; border: 0; background: transparent;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .theme button + button { border-left: 1px solid var(--line); }
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); }
+
+  /* --- Typography ------------------------------------------------------ */
+  main { padding: 3rem 0 5rem; }
+  .eyebrow {
+    font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 .75rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 1.3rem + 3vw, 3rem); line-height: 1.08;
+    letter-spacing: -.03em; font-weight: 640; margin: 0 0 1rem;
+  }
+  h2 {
+    font-size: clamp(1.3rem, 1.1rem + .8vw, 1.6rem); line-height: 1.2;
+    letter-spacing: -.02em; font-weight: 620;
+    margin: 3.5rem 0 1rem; padding-top: 1.75rem; border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 1.05rem; letter-spacing: -.01em; font-weight: 620;
+    margin: 2.25rem 0 .6rem;
+  }
+  h4 { font-size: .95rem; font-weight: 620; margin: 1.75rem 0 .4rem; }
+  p, li { color: var(--ink-2); }
+  .lede { font-size: 1.15rem; line-height: 1.55; color: var(--ink); max-width: 46rem; }
+  strong { color: var(--ink); font-weight: 620; }
+  a { color: var(--accent); text-underline-offset: .18em; text-decoration-thickness: 1px; }
+  ul, ol { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  li::marker { color: var(--ink-3); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 3rem 0; }
+
+  /* --- Code ------------------------------------------------------------ */
+  code, pre, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .855em;
+  }
+  :not(pre) > code {
+    background: var(--surface-2); color: var(--code-ink);
+    padding: .12em .35em; border-radius: .3rem;
+    border: 1px solid var(--line);
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: .6rem; padding: 1rem 1.1rem; margin: 1.25rem 0;
+    overflow-x: auto; line-height: 1.55; color: var(--code-ink);
+    box-shadow: var(--shadow);
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  pre.out { background: var(--surface-2); box-shadow: none; color: var(--ink-2); }
+
+  /* --- Tables ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; margin: 1.25rem 0; border-radius: .6rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: .92rem; }
+  th, td {
+    text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--ink-2);
+  }
+  th {
+    color: var(--ink); font-weight: 600; font-size: .8rem;
+    letter-spacing: .04em; text-transform: uppercase;
+    border-bottom-color: var(--line-strong);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { white-space: nowrap; }
+
+  /* --- Callouts -------------------------------------------------------- */
+  .note {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--surface); border-radius: .5rem;
+    padding: .9rem 1.1rem; margin: 1.5rem 0;
+  }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    display: block; font-size: .72rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+    margin-bottom: .35rem;
+  }
+
+  /* --- Card grid ------------------------------------------------------- */
+  .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 2rem 0; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    border: 1px solid var(--line); border-radius: .6rem;
+    background: var(--surface); padding: 1.1rem 1.2rem;
+  }
+  .card:hover { border-color: var(--line-strong); }
+  .card h3 { margin: 0 0 .3rem; font-size: .98rem; color: var(--ink); }
+  .card p { margin: 0; font-size: .9rem; color: var(--ink-3); }
+
+  /* --- Figures --------------------------------------------------------- */
+  figure { margin: 2rem 0; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  img.only-light { display: var(--light-only); }
+  img.only-dark { display: var(--dark-only); }
+  figcaption { font-size: .85rem; color: var(--ink-3); text-align: center; margin-top: .75rem; }
+
+  /* --- Footer ---------------------------------------------------------- */
+  footer.site {
+    border-top: 1px solid var(--line); padding: 2rem 0 3rem;
+    font-size: .88rem; color: var(--ink-3);
+  }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+  footer.site a { color: var(--ink-3); }
+  footer.site a:hover { color: var(--accent); }
+
+  @media (max-width: 46rem) {
+    /* The nav wraps to three rows on a phone. Sticking that to the top would
+       cost a third of the viewport on every page. */
+    header.site { position: static; }
+  }
+  @media (max-width: 40rem) {
+    main { padding-top: 2rem; }
+    h2 { margin-top: 2.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">WebCodecs Census <span>docs</span></a>
+    <nav class="site" aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="quickstart.html" aria-current="page">Quickstart</a>
+        <a href="api.html">API</a>
+        <a href="cdp.html">CDP driver</a>
+        <a href="mcp.html">MCP server</a>
+        <a href="extension.html">Extension</a>
+        <a href="ci.html">CI</a>
+        <a href="limits.html">Limits</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="system">System</button>
+      <button type="button" data-theme-set="light">Light</button>
+      <button type="button" data-theme-set="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="eyebrow">Quickstart</p>
+    <h1>Get a leak report</h1>
+    <p class="lede">
+      Three ways in, depending on whether you can edit the code being measured, want to drive a
+      browser from a script, or want an agent to do it.
+    </p>
+
+    <div class="note">
+      <span class="label">The one thing that matters</span>
+      <p>
+        The census only counts what it sees enter a context. Anything allocated <em>before</em>
+        it installs is invisible to it. Install as early as you can — which is exactly why the
+        CDP driver exists: it gets in before a worker's first line, which nothing running inside
+        the page can do.
+      </p>
+    </div>
+
+    <h2>1. From your own code</h2>
+
+    <p>Reach for this when you can edit the app or the test harness.</p>
+
+<pre><code>npm install --save-dev @motionvector/webcodecs-census</code></pre>
+
+    <p>Install it at the top of every context that touches media — the main thread and each worker:</p>
+
+<pre><code>import { installCensus, localCensus } from '@motionvector/webcodecs-census';
+
+installCensus({ context: 'decoder-worker' });</code></pre>
+
+    <p>Then ask what is still open:</p>
+
+<pre><code>const census = localCensus();
+// {
+//   live:              { VideoFrame: 58, VideoDecoder: 1 },
+//   entered:           { 'VideoFrame:decoded': 238, 'VideoDecoder:constructed': 1 },
+//   left:              { 'VideoFrame:closed': 179 },
+//   leakSites:         [ { count: 58, type: 'VideoFrame', origin: 'decoded', stack, oldestAgeMs } ],
+//   collectedUnclosed: { VideoFrame: 1 },
+//   mediaElements:     { total: 4, stalled: 1, byReadyState: { 0: 1, 4: 3 } },
+//   timeline:          [ … ],
+//   problems:          [],
+// }</code></pre>
+
+    <p>
+      <code>localCensus()</code> covers <strong>only the context it runs in</strong>. A worker's
+      census has to be collected in that worker and carried back to whoever is asking — the CDP
+      driver does this for you by querying each target on its own session.
+    </p>
+
+    <h2>2. From outside the app</h2>
+
+    <p>
+      No change to the code being measured, and workers are instrumented before their first line.
+    </p>
+
+<pre><code>npm install --save-dev @motionvector/webcodecs-census-cdp</code></pre>
+
+<pre><code>import { attach, launchChrome } from '@motionvector/webcodecs-census-cdp';
+import { summarize } from '@motionvector/webcodecs-census';
+
+const chrome = await launchChrome({ executablePath: CHROME });
+const session = await attach({ browserURL: chrome.browserURL });
+
+await session.navigate('http://localhost:5173/');
+await session.evaluate('document.querySelector("#play").click()');
+// …let it run…
+
+console.log(summarize(await session.census()));
+
+session.detach();
+await chrome.kill();</code></pre>
+
+    <p>
+      To attach to a browser you already started with <code>--remote-debugging-port</code>, pass
+      its endpoint instead:
+    </p>
+
+<pre><code>const session = await attach({ browserURL: 'http://127.0.0.1:9222' });</code></pre>
+
+    <p>Full options on the <a href="cdp.html">CDP driver page</a>.</p>
+
+    <h2>3. From an agent</h2>
+
+    <p>Register the MCP server with whatever runs your agent:</p>
+
+<pre><code>{
+  "mcpServers": {
+    "webcodecs-census": {
+      "command": "npx",
+      "args": ["-y", "@motionvector/webcodecs-census-mcp"]
+    }
+  }
+}</code></pre>
+
+<pre class="out"><code>webcodecs_attach { executablePath: "/path/to/chrome", url: "http://localhost:5173/" }
+→ Instrumented 3 context(s): page, worker, worker
+
+webcodecs_census
+→ worker (20s): VideoDecoder=1 VideoFrame=58
+  1 VideoFrame garbage collected without close() — definitively leaked.
+
+webcodecs_leak_sites { type: "VideoFrame" }
+→ 58x VideoFrame — decoded, oldest 124609ms, in worker
+      at PackagerWorker.setupDecoder (worker.js:1756:21)
+      (frame emitted by this VideoDecoder)</code></pre>
+
+    <p>Tool-by-tool detail on the <a href="mcp.html">MCP server page</a>.</p>
+
+    <h2>Reading the report</h2>
+
+    <p>These mean different things, and the difference is worth internalising.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Signal</th><th>What it means</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>live</code></td>
+            <td>
+              Still open right now. Could be a leak, could be a pipeline mid-flight. Judge it
+              against how long they have been live and how many you expect.
+            </td>
+          </tr>
+          <tr>
+            <td><code>collectedUnclosed</code></td>
+            <td>
+              Garbage collected while still open. The resource was held for the object's whole
+              lifetime and nothing will ever release it. Not a heuristic — a leak.
+            </td>
+          </tr>
+          <tr>
+            <td><code>overCloses</code> <em>(v0.3.0)</em></td>
+            <td>
+              A <code>close()</code> that threw, because something closed an already-closed codec.
+              A lifecycle bug, not a leak — reported, and only fatal if you ask for it.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      That is why <code>collectedUnclosed</code> fails a check for any tracked type, whatever you
+      passed for <code>types</code> — and why an over-close does not. A codec the platform closed
+      after an error is not counted as either. See <a href="api.html">the API reference</a>.
+    </p>
+
+    <h2>Making it a test</h2>
+
+<pre><code>import { expectNoLeakedFrames } from '@motionvector/webcodecs-census';
+
+test('the editor releases every frame it decodes', async () =&gt; {
+  await playThroughTimeline();
+  expectNoLeakedFrames(await session.census());
+});</code></pre>
+
+    <p>
+      It throws with the allocation sites attached. <a href="ci.html">CI recipes</a> covers
+      running this against a real Chrome on a runner.
+    </p>
+
+    <h2>Next</h2>
+
+    <div class="cards">
+      <a class="card" href="api.html">
+        <h3>API reference &rarr;</h3>
+        <p>Every function, every option, and what a verdict is computed from.</p>
+      </a>
+      <a class="card" href="limits.html">
+        <h3>Honest limits &rarr;</h3>
+        <p>What the census cannot see, and how it tells you so.</p>
+      </a>
+    </div>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>MIT &middot; MotionVector</span>
+    <a href="https://github.com/motionvector-dev/webcodecs-census">Source on GitHub</a>
+    <a href="https://www.npmjs.com/package/@motionvector/webcodecs-census">npm</a>
+    <a href="https://github.com/motionvector-dev/webcodecs-census/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll('[data-theme-set]');
+    function paint(mode) {
+      buttons.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.themeSet === mode));
+      });
+    }
+    function read() {
+      try { return localStorage.getItem('wcc-theme') || 'system'; } catch (e) { return 'system'; }
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var mode = b.dataset.themeSet;
+        if (mode === 'system') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', mode);
+        try { localStorage.setItem('wcc-theme', mode); } catch (e) {}
+        paint(mode);
+      });
+    });
+    paint(read());
+  })();
+</script>
+</body>
+</html>

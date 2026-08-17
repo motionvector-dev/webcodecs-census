@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Honest limits — WebCodecs Census</title>
+<meta name="description" content="What the census cannot see, what it reports instead of guessing, and what it costs to run.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%235eead4'/%3E%3Cpath d='M4 5h8M4 8h5M4 11h7' stroke='%2304211d' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  // Before first paint, so a chosen theme does not flash the other one.
+  try {
+    var t = localStorage.getItem('wcc-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<style>
+  /* --- Palette ---------------------------------------------------------
+     Light is the bare :root so a page with no theme signal still has one.
+     Dark is defined twice on purpose: once behind prefers-color-scheme for
+     the "System" setting, once behind [data-theme] so the toggle wins. */
+  :root {
+    --ground: #fbfbfa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --ink: #18181b;
+    --ink-2: #3f3f46;
+    --ink-3: #71717a;
+    --accent: #0d7c6d;
+    --accent-ink: #ffffff;
+    --accent-wash: #0d7c6d14;
+    --code-ink: #27272a;
+    --shadow: 0 1px 2px #18181b0f, 0 8px 24px -16px #18181b26;
+    --light-only: block;
+    --dark-only: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #000000;
+      --surface: #050506;
+      --surface-2: #101012;
+      --line: #232327;
+      --line-strong: #34343a;
+      --ink: #f4f4f5;
+      --ink-2: #b8b8c0;
+      --ink-3: #85858f;
+      --accent: #5eead4;
+      --accent-ink: #04211d;
+      --accent-wash: #5eead414;
+      --code-ink: #d8d8e0;
+      --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+      --light-only: none;
+      --dark-only: block;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #000000;
+    --surface: #050506;
+    --surface-2: #101012;
+    --line: #232327;
+    --line-strong: #34343a;
+    --ink: #f4f4f5;
+    --ink-2: #b8b8c0;
+    --ink-3: #85858f;
+    --accent: #5eead4;
+    --accent-ink: #04211d;
+    --accent-wash: #5eead414;
+    --code-ink: #d8d8e0;
+    --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+    --light-only: none;
+    --dark-only: block;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16.5px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "kern" 1;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* --- Header ---------------------------------------------------------- */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header.site .wrap {
+    display: flex; align-items: center; gap: 1rem 1.5rem;
+    flex-wrap: wrap; padding-top: .85rem; padding-bottom: .85rem;
+  }
+  .brand {
+    font-weight: 620; letter-spacing: -.015em; color: var(--ink);
+    text-decoration: none; font-size: .98rem; white-space: nowrap;
+  }
+  .brand span { color: var(--ink-3); font-weight: 400; }
+  nav.site { display: flex; flex-wrap: wrap; gap: .15rem .35rem; margin-right: auto; }
+  nav.site a {
+    color: var(--ink-3); text-decoration: none; font-size: .875rem;
+    padding: .25rem .5rem; border-radius: .35rem; white-space: nowrap;
+  }
+  nav.site a:hover { color: var(--ink); background: var(--surface-2); }
+  nav.site a[aria-current="page"] { color: var(--accent); background: var(--accent-wash); }
+
+  /* --- Theme toggle ---------------------------------------------------- */
+  .theme {
+    display: inline-flex; border: 1px solid var(--line); border-radius: .45rem;
+    overflow: hidden; background: var(--surface);
+  }
+  .theme button {
+    font: inherit; font-size: .74rem; letter-spacing: .02em;
+    padding: .3rem .55rem; border: 0; background: transparent;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .theme button + button { border-left: 1px solid var(--line); }
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); }
+
+  /* --- Typography ------------------------------------------------------ */
+  main { padding: 3rem 0 5rem; }
+  .eyebrow {
+    font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 .75rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 1.3rem + 3vw, 3rem); line-height: 1.08;
+    letter-spacing: -.03em; font-weight: 640; margin: 0 0 1rem;
+  }
+  h2 {
+    font-size: clamp(1.3rem, 1.1rem + .8vw, 1.6rem); line-height: 1.2;
+    letter-spacing: -.02em; font-weight: 620;
+    margin: 3.5rem 0 1rem; padding-top: 1.75rem; border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 1.05rem; letter-spacing: -.01em; font-weight: 620;
+    margin: 2.25rem 0 .6rem;
+  }
+  h4 { font-size: .95rem; font-weight: 620; margin: 1.75rem 0 .4rem; }
+  p, li { color: var(--ink-2); }
+  .lede { font-size: 1.15rem; line-height: 1.55; color: var(--ink); max-width: 46rem; }
+  strong { color: var(--ink); font-weight: 620; }
+  a { color: var(--accent); text-underline-offset: .18em; text-decoration-thickness: 1px; }
+  ul, ol { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  li::marker { color: var(--ink-3); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 3rem 0; }
+
+  /* --- Code ------------------------------------------------------------ */
+  code, pre, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .855em;
+  }
+  :not(pre) > code {
+    background: var(--surface-2); color: var(--code-ink);
+    padding: .12em .35em; border-radius: .3rem;
+    border: 1px solid var(--line);
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: .6rem; padding: 1rem 1.1rem; margin: 1.25rem 0;
+    overflow-x: auto; line-height: 1.55; color: var(--code-ink);
+    box-shadow: var(--shadow);
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  pre.out { background: var(--surface-2); box-shadow: none; color: var(--ink-2); }
+
+  /* --- Tables ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; margin: 1.25rem 0; border-radius: .6rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: .92rem; }
+  th, td {
+    text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--ink-2);
+  }
+  th {
+    color: var(--ink); font-weight: 600; font-size: .8rem;
+    letter-spacing: .04em; text-transform: uppercase;
+    border-bottom-color: var(--line-strong);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { white-space: nowrap; }
+
+  /* --- Callouts -------------------------------------------------------- */
+  .note {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--surface); border-radius: .5rem;
+    padding: .9rem 1.1rem; margin: 1.5rem 0;
+  }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    display: block; font-size: .72rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+    margin-bottom: .35rem;
+  }
+
+  /* --- Card grid ------------------------------------------------------- */
+  .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 2rem 0; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    border: 1px solid var(--line); border-radius: .6rem;
+    background: var(--surface); padding: 1.1rem 1.2rem;
+  }
+  .card:hover { border-color: var(--line-strong); }
+  .card h3 { margin: 0 0 .3rem; font-size: .98rem; color: var(--ink); }
+  .card p { margin: 0; font-size: .9rem; color: var(--ink-3); }
+
+  /* --- Figures --------------------------------------------------------- */
+  figure { margin: 2rem 0; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  img.only-light { display: var(--light-only); }
+  img.only-dark { display: var(--dark-only); }
+  figcaption { font-size: .85rem; color: var(--ink-3); text-align: center; margin-top: .75rem; }
+
+  /* --- Footer ---------------------------------------------------------- */
+  footer.site {
+    border-top: 1px solid var(--line); padding: 2rem 0 3rem;
+    font-size: .88rem; color: var(--ink-3);
+  }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+  footer.site a { color: var(--ink-3); }
+  footer.site a:hover { color: var(--accent); }
+
+  @media (max-width: 46rem) {
+    /* The nav wraps to three rows on a phone. Sticking that to the top would
+       cost a third of the viewport on every page. */
+    header.site { position: static; }
+  }
+  @media (max-width: 40rem) {
+    main { padding-top: 2rem; }
+    h2 { margin-top: 2.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">WebCodecs Census <span>docs</span></a>
+    <nav class="site" aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="api.html">API</a>
+        <a href="cdp.html">CDP driver</a>
+        <a href="mcp.html">MCP server</a>
+        <a href="extension.html">Extension</a>
+        <a href="ci.html">CI</a>
+        <a href="limits.html" aria-current="page">Limits</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="system">System</button>
+      <button type="button" data-theme-set="light">Light</button>
+      <button type="button" data-theme-set="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="eyebrow">Honest limits</p>
+    <h1>What it cannot see</h1>
+    <p class="lede">
+      A leak detector that silently sees nothing reports a clean bill of health for an app that is
+      losing every frame. That is worse than having no tool. So here is the blind-spot list, and
+      the machinery that keeps a gap from passing as a pass.
+    </p>
+
+    <h2>How a gap is reported</h2>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Signal</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>problems[]</code></td>
+            <td>
+              A patch step that failed in this context. Every step of
+              <code>installCensus</code> is wrapped separately and records its failure here
+              instead of throwing. Non-empty means the counts beside it are a <strong>floor, not a
+              total</strong>.
+            </td>
+          </tr>
+          <tr>
+            <td><code>closedUnseen</code></td>
+            <td>
+              Something was closed here that the census never saw arrive. Usually a receive path
+              the message scanner did not reach. It is a count of objects whose lifetime was only
+              half observed.
+            </td>
+          </tr>
+          <tr>
+            <td>skipped workers (patch mode)</td>
+            <td>
+              Every worker the extension's patch mode could not wrap, with the reason, in the
+              popup and in the census payload.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      If you add a code path that can silently observe less than it appears to, add the counter or
+      the <code>problems[]</code> entry that makes it visible. That is the project's one
+      non-negotiable rule.
+    </p>
+
+    <h2>Blind spots</h2>
+
+    <h3>Anything allocated before it installs</h3>
+
+    <p>
+      The census counts what it sees enter a context. Objects that already existed are invisible —
+      not counted live, and a later <code>close()</code> on one lands in
+      <code>closedUnseen</code>. This is the entire reason the CDP driver goes to the trouble of
+      two pauses per worker.
+    </p>
+
+    <h3>Encoded chunks</h3>
+
+    <p>
+      <code>EncodedVideoChunk</code> and <code>EncodedAudioChunk</code> have no
+      <code>close()</code> and hold no external resource, so they are not tracked as leakable.
+      Encoders emit them, which is why an encoder's <code>output</code> callback produces nothing
+      the census counts.
+    </p>
+
+    <h3>Frames from <code>MediaStreamTrackProcessor</code></h3>
+
+    <p>
+      They reach you through a <code>ReadableStream</code> rather than a constructor or a codec
+      <code>output</code> callback, so they are not attributed to an allocation site. Closing one
+      shows up as <code>closedUnseen</code> rather than as a matched lifetime.
+    </p>
+
+    <h3>Objects buried deep in a message</h3>
+
+    <p>
+      The receive-side scanner walks <strong>3 levels</strong> and <strong>64 entries</strong> per
+      level, and descends only into arrays and plain object carriers — an object whose prototype is
+      a class is not walked into. This runs on every message and has to stay cheap. A frame buried
+      deeper, or held on a class instance, arrives uncounted and later surfaces as
+      <code>closedUnseen</code>.
+    </p>
+
+    <h3>Patch mode changes <code>self.location</code></h3>
+
+    <p>
+      A worker wrapped by the extension's patch mode sees the loader blob URL as
+      <code>self.location</code>. Workers using <code>import.meta.url</code> are unaffected;
+      workers building paths from <code>self.location</code> are not. Patch mode also cannot cover
+      a worker that started before it installed, and cannot create a blob worker at all on a page
+      whose CSP omits <code>blob:</code> — which it reports rather than hides.
+    </p>
+
+    <h3>Exact mode cannot share a tab with DevTools</h3>
+
+    <p>Chrome allows one debugger client per tab. Patch mode exists for when that trade is not worth it.</p>
+
+    <h3>One context at a time, in-process</h3>
+
+    <p>
+      <code>localCensus()</code> covers only the context it runs in. Getting a worker's census
+      means running it inside that worker and carrying the result back. The CDP driver and the
+      extension do this by querying each target on its own session.
+    </p>
+
+    <h3><code>collectedUnclosed</code> waits for the collector</h3>
+
+    <p>
+      It is reported by a <code>FinalizationRegistry</code>, which fires when the GC actually
+      collects the object. That is not on your schedule. A leak that has not been collected yet
+      shows up as <code>live</code>, not as <code>collectedUnclosed</code> — the two are the same
+      bug at different stages.
+    </p>
+
+    <h3><code>minAgeMs</code> filters the attribution, not the verdict</h3>
+
+    <p>
+      As of v0.2.1, <code>minAgeMs</code> drops young allocation sites from
+      <code>report.sites</code>. It does not filter <code>report.live</code>, which is what
+      <code>report.ok</code> is computed from. Use <code>allow</code> to tolerate a steady-state
+      pool.
+    </p>
+
+    <h3>Chrome, for the driver and the extension</h3>
+
+    <p>
+      The CDP driver and the extension are Chrome and Chromium only — they depend on the DevTools
+      Protocol and on Chrome-specific worker pause behaviour. The core is plain JavaScript with no
+      dependencies and runs anywhere WebCodecs does.
+    </p>
+
+    <h3>Undocumented behaviour, pinned deliberately</h3>
+
+    <p>
+      Injection depends on Chrome behaviour that is measured rather than specified: that workers
+      pause before their first line, that the <code>beforeScriptExecution</code> breakpoint
+      exists, and that codecs are absent at the earlier pause.
+      <code>test/platform-assumptions.test.mjs</code> asserts each of those and prints what it
+      measured, so a browser change is reported as a browser change. CI pins one Chrome version
+      for its blocking job and runs a separate scheduled job against stable — drift is news, not a
+      blocked pull request.
+    </p>
+
+    <h2>What it costs</h2>
+
+    <p>
+      Measured, not estimated: <strong>+5.6 µs per tracked allocation</strong> and
+      <strong>~284 bytes per live tracked object</strong>, the latter bounded by the size of the
+      leak itself. At 60 fps that is 0.03% of a second. It only matters above roughly 100k
+      allocations per second.
+    </p>
+
+    <p>
+      Suitable for development and CI. Not recommended enabled by default in production builds —
+      not for speed, but because it patches global constructors and retains a stack per live
+      object.
+    </p>
+
+    <h2>What it deliberately does not do</h2>
+
+    <ul>
+      <li>
+        <strong>No network requests.</strong> The core makes none: no telemetry, no beacons, no
+        reporting. Verify with
+        <code>grep -rE 'fetch\(|sendBeacon|WebSocket' node_modules/@motionvector/webcodecs-census/dist</code>.
+      </li>
+      <li><strong>No frame or audio contents</strong> are read, copied or transmitted.</li>
+      <li>
+        <strong>No strong references.</strong> The census holds metadata and weak references only,
+        so it cannot itself become the leak it is looking for.
+      </li>
+      <li><strong>No runtime dependencies</strong> in the core package.</li>
+    </ul>
+
+    <h2>Things that look alarming and are the point</h2>
+
+    <p>
+      The census patches global constructors, keeps allocation stacks in memory, exposes
+      <code>window.__webcodecsCensus</code> to anything in the page, and the MCP server runs
+      arbitrary JavaScript in the page under test. CDP ports are unauthenticated by design. None
+      of that is incidental —
+      <a href="https://github.com/motionvector-dev/webcodecs-census/blob/main/SECURITY.md">SECURITY.md</a>
+      says which of it is deliberate, which is not, and how to report a problem.
+    </p>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>MIT &middot; MotionVector</span>
+    <a href="https://github.com/motionvector-dev/webcodecs-census">Source on GitHub</a>
+    <a href="https://www.npmjs.com/package/@motionvector/webcodecs-census">npm</a>
+    <a href="https://github.com/motionvector-dev/webcodecs-census/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll('[data-theme-set]');
+    function paint(mode) {
+      buttons.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.themeSet === mode));
+      });
+    }
+    function read() {
+      try { return localStorage.getItem('wcc-theme') || 'system'; } catch (e) { return 'system'; }
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var mode = b.dataset.themeSet;
+        if (mode === 'system') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', mode);
+        try { localStorage.setItem('wcc-theme', mode); } catch (e) {}
+        paint(mode);
+      });
+    });
+    paint(read());
+  })();
+</script>
+</body>
+</html>

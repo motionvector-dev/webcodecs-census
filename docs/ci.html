@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CI recipes — WebCodecs Census</title>
+<meta name="description" content="Turn a WebCodecs leak into a test failure: workflow, test harness, and how to tune the thresholds.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%235eead4'/%3E%3Cpath d='M4 5h8M4 8h5M4 11h7' stroke='%2304211d' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  // Before first paint, so a chosen theme does not flash the other one.
+  try {
+    var t = localStorage.getItem('wcc-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<style>
+  /* --- Palette ---------------------------------------------------------
+     Light is the bare :root so a page with no theme signal still has one.
+     Dark is defined twice on purpose: once behind prefers-color-scheme for
+     the "System" setting, once behind [data-theme] so the toggle wins. */
+  :root {
+    --ground: #fbfbfa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --ink: #18181b;
+    --ink-2: #3f3f46;
+    --ink-3: #71717a;
+    --accent: #0d7c6d;
+    --accent-ink: #ffffff;
+    --accent-wash: #0d7c6d14;
+    --code-ink: #27272a;
+    --shadow: 0 1px 2px #18181b0f, 0 8px 24px -16px #18181b26;
+    --light-only: block;
+    --dark-only: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #000000;
+      --surface: #050506;
+      --surface-2: #101012;
+      --line: #232327;
+      --line-strong: #34343a;
+      --ink: #f4f4f5;
+      --ink-2: #b8b8c0;
+      --ink-3: #85858f;
+      --accent: #5eead4;
+      --accent-ink: #04211d;
+      --accent-wash: #5eead414;
+      --code-ink: #d8d8e0;
+      --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+      --light-only: none;
+      --dark-only: block;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #000000;
+    --surface: #050506;
+    --surface-2: #101012;
+    --line: #232327;
+    --line-strong: #34343a;
+    --ink: #f4f4f5;
+    --ink-2: #b8b8c0;
+    --ink-3: #85858f;
+    --accent: #5eead4;
+    --accent-ink: #04211d;
+    --accent-wash: #5eead414;
+    --code-ink: #d8d8e0;
+    --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+    --light-only: none;
+    --dark-only: block;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16.5px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "kern" 1;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* --- Header ---------------------------------------------------------- */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header.site .wrap {
+    display: flex; align-items: center; gap: 1rem 1.5rem;
+    flex-wrap: wrap; padding-top: .85rem; padding-bottom: .85rem;
+  }
+  .brand {
+    font-weight: 620; letter-spacing: -.015em; color: var(--ink);
+    text-decoration: none; font-size: .98rem; white-space: nowrap;
+  }
+  .brand span { color: var(--ink-3); font-weight: 400; }
+  nav.site { display: flex; flex-wrap: wrap; gap: .15rem .35rem; margin-right: auto; }
+  nav.site a {
+    color: var(--ink-3); text-decoration: none; font-size: .875rem;
+    padding: .25rem .5rem; border-radius: .35rem; white-space: nowrap;
+  }
+  nav.site a:hover { color: var(--ink); background: var(--surface-2); }
+  nav.site a[aria-current="page"] { color: var(--accent); background: var(--accent-wash); }
+
+  /* --- Theme toggle ---------------------------------------------------- */
+  .theme {
+    display: inline-flex; border: 1px solid var(--line); border-radius: .45rem;
+    overflow: hidden; background: var(--surface);
+  }
+  .theme button {
+    font: inherit; font-size: .74rem; letter-spacing: .02em;
+    padding: .3rem .55rem; border: 0; background: transparent;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .theme button + button { border-left: 1px solid var(--line); }
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); }
+
+  /* --- Typography ------------------------------------------------------ */
+  main { padding: 3rem 0 5rem; }
+  .eyebrow {
+    font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 .75rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 1.3rem + 3vw, 3rem); line-height: 1.08;
+    letter-spacing: -.03em; font-weight: 640; margin: 0 0 1rem;
+  }
+  h2 {
+    font-size: clamp(1.3rem, 1.1rem + .8vw, 1.6rem); line-height: 1.2;
+    letter-spacing: -.02em; font-weight: 620;
+    margin: 3.5rem 0 1rem; padding-top: 1.75rem; border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 1.05rem; letter-spacing: -.01em; font-weight: 620;
+    margin: 2.25rem 0 .6rem;
+  }
+  h4 { font-size: .95rem; font-weight: 620; margin: 1.75rem 0 .4rem; }
+  p, li { color: var(--ink-2); }
+  .lede { font-size: 1.15rem; line-height: 1.55; color: var(--ink); max-width: 46rem; }
+  strong { color: var(--ink); font-weight: 620; }
+  a { color: var(--accent); text-underline-offset: .18em; text-decoration-thickness: 1px; }
+  ul, ol { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  li::marker { color: var(--ink-3); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 3rem 0; }
+
+  /* --- Code ------------------------------------------------------------ */
+  code, pre, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .855em;
+  }
+  :not(pre) > code {
+    background: var(--surface-2); color: var(--code-ink);
+    padding: .12em .35em; border-radius: .3rem;
+    border: 1px solid var(--line);
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: .6rem; padding: 1rem 1.1rem; margin: 1.25rem 0;
+    overflow-x: auto; line-height: 1.55; color: var(--code-ink);
+    box-shadow: var(--shadow);
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  pre.out { background: var(--surface-2); box-shadow: none; color: var(--ink-2); }
+
+  /* --- Tables ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; margin: 1.25rem 0; border-radius: .6rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: .92rem; }
+  th, td {
+    text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--ink-2);
+  }
+  th {
+    color: var(--ink); font-weight: 600; font-size: .8rem;
+    letter-spacing: .04em; text-transform: uppercase;
+    border-bottom-color: var(--line-strong);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { white-space: nowrap; }
+
+  /* --- Callouts -------------------------------------------------------- */
+  .note {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--surface); border-radius: .5rem;
+    padding: .9rem 1.1rem; margin: 1.5rem 0;
+  }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    display: block; font-size: .72rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+    margin-bottom: .35rem;
+  }
+
+  /* --- Card grid ------------------------------------------------------- */
+  .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 2rem 0; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    border: 1px solid var(--line); border-radius: .6rem;
+    background: var(--surface); padding: 1.1rem 1.2rem;
+  }
+  .card:hover { border-color: var(--line-strong); }
+  .card h3 { margin: 0 0 .3rem; font-size: .98rem; color: var(--ink); }
+  .card p { margin: 0; font-size: .9rem; color: var(--ink-3); }
+
+  /* --- Figures --------------------------------------------------------- */
+  figure { margin: 2rem 0; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  img.only-light { display: var(--light-only); }
+  img.only-dark { display: var(--dark-only); }
+  figcaption { font-size: .85rem; color: var(--ink-3); text-align: center; margin-top: .75rem; }
+
+  /* --- Footer ---------------------------------------------------------- */
+  footer.site {
+    border-top: 1px solid var(--line); padding: 2rem 0 3rem;
+    font-size: .88rem; color: var(--ink-3);
+  }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+  footer.site a { color: var(--ink-3); }
+  footer.site a:hover { color: var(--accent); }
+
+  @media (max-width: 46rem) {
+    /* The nav wraps to three rows on a phone. Sticking that to the top would
+       cost a third of the viewport on every page. */
+    header.site { position: static; }
+  }
+  @media (max-width: 40rem) {
+    main { padding-top: 2rem; }
+    h2 { margin-top: 2.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">WebCodecs Census <span>docs</span></a>
+    <nav class="site" aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="api.html">API</a>
+        <a href="cdp.html">CDP driver</a>
+        <a href="mcp.html">MCP server</a>
+        <a href="extension.html">Extension</a>
+        <a href="ci.html" aria-current="page">CI</a>
+        <a href="limits.html">Limits</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="system">System</button>
+      <button type="button" data-theme-set="light">Light</button>
+      <button type="button" data-theme-set="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="eyebrow">CI recipes</p>
+    <h1>Make a leak a test failure</h1>
+    <p class="lede">
+      A leaked frame is easy to ship and hard to notice. Asserted in CI, it becomes a red build
+      on the pull request that introduced it instead of a mystery six months later.
+    </p>
+
+    <h2>The shape of it</h2>
+
+    <ol>
+      <li>Install a <strong>pinned</strong> Chrome for Testing on the runner.</li>
+      <li>Serve the app, launch Chrome, attach the census.</li>
+      <li>Drive the workload you care about.</li>
+      <li>Assert. Fail with the allocation site in the log.</li>
+    </ol>
+
+    <p>
+      Pin the browser version. The injection path depends on undocumented Chrome behaviour, so an
+      unpinned browser turns a Chrome release into a mysterious failure on an unrelated pull
+      request. This repository pins one version for its blocking job and runs a separate,
+      non-blocking job against stable on a schedule — a browser change is then news, not a
+      blocker.
+    </p>
+
+    <h2>GitHub Actions</h2>
+
+<pre><code>name: leak check
+
+on: [push, pull_request]
+
+jobs:
+  leaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chrome for Testing
+        run: |
+          # Prints "chrome@&lt;version&gt; &lt;path&gt;"; the path is the last field.
+          OUT=$(npx --yes @puppeteer/browsers install chrome@151.0.7922.71)
+          echo "$OUT"
+          echo "CHROME_PATH=${OUT##* }" &gt;&gt; "$GITHUB_ENV"
+
+      - run: npm run build
+      - run: node --test --test-timeout=120000 test/leaks.test.mjs</code></pre>
+
+    <p>
+      Use Node 22. The CDP client uses Node's built-in global <code>WebSocket</code> and imports
+      no WebSocket library.
+    </p>
+
+    <h2>The test</h2>
+
+<pre><code>import { test, after } from 'node:test';
+import { attach, launchChrome } from '@motionvector/webcodecs-census-cdp';
+import { expectNoLeaks, summarize } from '@motionvector/webcodecs-census';
+
+const chrome = await launchChrome({
+  executablePath: process.env.CHROME_PATH,
+  // Chrome's sandbox needs privileges a CI container usually will not grant,
+  // and the failure is an opaque early exit rather than a message about it.
+  args: process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : [],
+});
+
+const session = await attach({ browserURL: chrome.browserURL });
+
+after(async () =&gt; {
+  session.detach();
+  await chrome.kill();
+});
+
+test('the editor releases every frame it decodes', async () =&gt; {
+  await session.navigate('http://127.0.0.1:5173/');
+  await session.evaluate('window.playThroughTimeline()');
+
+  const censuses = await session.census();
+  console.log(summarize(censuses));          // useful even when it passes
+  expectNoLeaks(censuses, { types: 'all' });
+});</code></pre>
+
+    <p>
+      Print the summary whether or not it fails. A passing run that quietly drifts from 2 live
+      frames to 200 is the thing you want to catch before it crosses a threshold.
+    </p>
+
+    <div class="note">
+      <span class="label">Watch the problems array</span>
+      <p>
+        <code>census.problems</code> lists anything a context could not instrument. Non-empty
+        means the counts below it are a floor, not a total. Assert on it too, or a build that
+        instrumented nothing passes for the same reason an app with no leaks does.
+      </p>
+<pre><code>for (const c of censuses) assert.deepEqual(c.problems, [], `${c.context} was not fully instrumented`);</code></pre>
+    </div>
+
+    <h2>Without a driver</h2>
+
+    <p>
+      If your suite already runs in a browser — a Karma, Vitest browser-mode or Playwright
+      component test — install the core directly and assert on the local census. Remember it
+      covers only the context it runs in, so a worker's census has to be collected inside that
+      worker.
+    </p>
+
+<pre><code>import { installCensus, localCensus, expectNoLeakedFrames } from '@motionvector/webcodecs-census';
+
+installCensus({ context: 'test' });
+
+test('decoding a clip leaks nothing', async () =&gt; {
+  await decodeClip();
+  expectNoLeakedFrames([localCensus()]);
+});</code></pre>
+
+    <h2>Tuning the threshold</h2>
+
+    <p>A steady-state pipeline legitimately holds a few objects open. Say so explicitly.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Want</th><th>Do</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Frames only, which is the usual first gate</td>
+            <td><code>expectNoLeakedFrames(censuses)</code></td>
+          </tr>
+          <tr>
+            <td>Hold the codecs to the same standard</td>
+            <td><code>expectNoLeaks(censuses, { types: 'all' })</code></td>
+          </tr>
+          <tr>
+            <td>Tolerate a small steady-state pool</td>
+            <td><code>expectNoLeaks(censuses, { allow: { VideoFrame: 4 } })</code></td>
+          </tr>
+          <tr>
+            <td>Fail when something closes a codec twice <em>(v0.3.0)</em></td>
+            <td><code>expectNoLeaks(censuses, { failOnOverClose: true })</code></td>
+          </tr>
+          <tr>
+            <td>Report rather than fail</td>
+            <td><code>const { ok, message } = checkLeaks(censuses)</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Whatever you pass, an object the GC collected while it was still open fails the check, and
+      a type left out of <code>types</code> is named in the message rather than quietly reported
+      clean. Both are deliberate — see <a href="api.html">the API reference</a>.
+    </p>
+
+    <h2>Reading a failure</h2>
+
+<pre class="out"><code>Error: 3 VideoFrame garbage collected without close() — definitively leaked.
+58 VideoFrame still live (allowed 0).
+Not enforced, and still live: VideoDecoder=1.
+
+Held by:
+  58x VideoFrame (decoded, oldest 124609ms) in worker
+      at PackagerWorker.setupDecoder (worker.js:1756:21)
+      (frame emitted by this VideoDecoder)</code></pre>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Line</th><th>Read it as</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>garbage collected without close()</code></td>
+            <td>Certain. The resource was held for the object's whole lifetime. Fix this first.</td>
+          </tr>
+          <tr>
+            <td><code>still live (allowed 0)</code></td>
+            <td>Open at census time. Check the age — <code>oldest 124609ms</code> is not a pipeline mid-flight.</td>
+          </tr>
+          <tr>
+            <td><code>decoded</code></td>
+            <td>The platform made this frame and handed it to a decoder's <code>output</code> callback. The stack is that decoder's construction site, which is the line to look at.</td>
+          </tr>
+          <tr>
+            <td><code>Not enforced, and still live</code></td>
+            <td>A type outside <code>types</code> holding objects. Not a failure here, but it is why you might want <code>types: 'all'</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Where the leak usually is</h2>
+
+    <ul>
+      <li>An <code>output</code> callback that returns early — on a seek, an abort, a queue that is already full — without closing the frame it was handed.</li>
+      <li>A <code>.clone()</code> whose second handle nobody closes. Cloning is cheap to write and easy to forget.</li>
+      <li>A library contract: mediabunny's <code>VideoSample.toVideoFrame()</code> hands back a frame that must be closed <em>separately</em> from the sample. Close every sample diligently, forget the frames, and you leak silently.</li>
+      <li>A worker that is terminated while frames are in flight. Nothing runs your cleanup.</li>
+    </ul>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>MIT &middot; MotionVector</span>
+    <a href="https://github.com/motionvector-dev/webcodecs-census">Source on GitHub</a>
+    <a href="https://www.npmjs.com/package/@motionvector/webcodecs-census">npm</a>
+    <a href="https://github.com/motionvector-dev/webcodecs-census/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll('[data-theme-set]');
+    function paint(mode) {
+      buttons.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.themeSet === mode));
+      });
+    }
+    function read() {
+      try { return localStorage.getItem('wcc-theme') || 'system'; } catch (e) { return 'system'; }
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var mode = b.dataset.themeSet;
+        if (mode === 'system') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', mode);
+        try { localStorage.setItem('wcc-theme', mode); } catch (e) {}
+        paint(mode);
+      });
+    });
+    paint(read());
+  })();
+</script>
+</body>
+</html>
