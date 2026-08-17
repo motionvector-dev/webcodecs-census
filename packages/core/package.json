@@ -1,6 +1,6 @@
 {
   "name": "@motionvector/webcodecs-census",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Find leaked VideoFrames, AudioData and codecs in WebCodecs apps — including inside Web Workers — and get the allocation stack that caused them.",
   "type": "module",
   "license": "MIT",

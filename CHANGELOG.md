@@ -8,6 +8,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-17
+
 ### Fixed
 
 - **`minAgeMs` did not change the verdict.** It filtered the reported
@@ -226,7 +228,8 @@ First release.
   `webcodecs_leak_sites`, `webcodecs_timeline`, `webcodecs_evaluate` and
   `webcodecs_detach`.
 
-[Unreleased]: https://github.com/motionvector-dev/webcodecs-census/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/motionvector-dev/webcodecs-census/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/motionvector-dev/webcodecs-census/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/motionvector-dev/webcodecs-census/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/motionvector-dev/webcodecs-census/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/motionvector-dev/webcodecs-census/compare/v0.1.0...v0.2.0
