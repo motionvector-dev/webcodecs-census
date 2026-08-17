@@ -4,7 +4,7 @@
  */
 
 import { TRACKED } from './types';
-import type { ContextCensus, LeakSite, TrackedType } from './types';
+import type { ContextCensus, LeakSite, OverCloseSite, TrackedType } from './types';
 
 export interface LeakReport {
   ok: boolean;
@@ -21,6 +21,12 @@ export interface LeakReport {
   enforced: TrackedType[];
   /** Allocation sites holding live objects, worst first. */
   sites: (LeakSite & { context: string })[];
+  /**
+   * close() calls that threw, worst first. Never a leak, so it does not decide
+   * `ok` unless `failOnOverClose` says so — but always reported, because the
+   * platform reports it to nobody who can act on it.
+   */
+  overCloses: (OverCloseSite & { context: string })[];
   message: string;
 }
 
@@ -35,6 +41,12 @@ export interface LeakOptions {
   allow?: Partial<Record<TrackedType, number>>;
   /** Ignore live objects younger than this — they may be legitimately in flight. */
   minAgeMs?: number;
+  /**
+   * Fail when a `close()` threw. Off by default: the usual cause is a library
+   * closing a codec twice, which the app that would see the failure cannot
+   * fix. Turn it on for code you own.
+   */
+  failOnOverClose?: boolean;
 }
 
 const DEFAULT_TYPES: TrackedType[] = ['VideoFrame', 'AudioData', 'ImageBitmap'];
@@ -66,6 +78,7 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
   const unenforcedLive: Partial<Record<TrackedType, number>> = {};
   const collectedUnclosed: Partial<Record<TrackedType, number>> = {};
   const sites: (LeakSite & { context: string })[] = [];
+  const overCloses: (OverCloseSite & { context: string })[] = [];
 
   for (const c of censuses) {
     for (const t of TRACKED) {
@@ -78,6 +91,7 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
         collectedUnclosed[t] = (collectedUnclosed[t] ?? 0) + c.collectedUnclosed[t]!;
       }
     }
+    for (const o of c.overCloses ?? []) overCloses.push({ ...o, context: c.context });
     for (const s of c.leakSites) {
       if (enforced.includes(s.type) && s.oldestAgeMs >= minAgeMs) {
         sites.push({ ...s, context: c.context });
@@ -85,10 +99,14 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
     }
   }
   sites.sort((a, b) => b.count - a.count);
+  overCloses.sort((a, b) => b.count - a.count);
 
   const over = enforced.filter((t) => (live[t] ?? 0) > (allow[t] ?? 0));
   const collected = TRACKED.filter((t) => (collectedUnclosed[t] ?? 0) > 0);
-  const ok = over.length === 0 && collected.length === 0;
+  const ok =
+    over.length === 0 &&
+    collected.length === 0 &&
+    !(options.failOnOverClose && overCloses.length);
 
   return {
     ok,
@@ -97,7 +115,19 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
     collectedUnclosed,
     enforced,
     sites,
-    message: describe(ok, over, collected, enforced, live, unenforcedLive, collectedUnclosed, sites, allow),
+    overCloses,
+    message: describe(
+      ok,
+      over,
+      collected,
+      enforced,
+      live,
+      unenforcedLive,
+      collectedUnclosed,
+      sites,
+      overCloses,
+      allow,
+    ),
   };
 }
 
@@ -110,17 +140,29 @@ function describe(
   unenforcedLive: Partial<Record<TrackedType, number>>,
   collectedUnclosed: Partial<Record<TrackedType, number>>,
   sites: (LeakSite & { context: string })[],
+  overCloses: (OverCloseSite & { context: string })[],
   allow: Partial<Record<TrackedType, number>>,
 ): string {
   const unenforced = counts(unenforcedLive);
+  const overClose = overCloses.length
+    ? [
+        '',
+        `${overCloses.reduce((n, o) => n + o.count, 0)} close() call(s) threw — a codec was closed twice:`,
+        ...overCloses.slice(0, 3).flatMap((o) => [
+          `  ${o.count}x ${o.type}: ${o.message} (in ${o.context})`,
+          ...o.stack.split('\n').slice(0, 2).map((l) => `      ${l.trim()}`),
+        ]),
+      ]
+    : [];
 
   if (ok) {
-    if (!unenforced) return 'No leaked WebCodecs objects.';
+    if (!unenforced && !overClose.length) return 'No leaked WebCodecs objects.';
+    if (!unenforced) return ['No leaked WebCodecs objects.', ...overClose].join('\n');
     // An unqualified all-clear next to 47 live decoders is how this tool
     // reported clean on the exact leak it was pointed at.
     return (
       `No leaks in ${enforced.join(', ')} — but ${unenforced} still live and not enforced. ` +
-      `Pass types: 'all' to check those too.`
+      `Pass types: 'all' to check those too.` + overClose.join('\n')
     );
   }
 
@@ -134,6 +176,7 @@ function describe(
   if (unenforced) {
     lines.push(`Not enforced, and still live: ${unenforced}. Pass types: 'all' to check those too.`);
   }
+  lines.push(...overClose);
   if (sites.length) {
     lines.push('', 'Held by:');
     for (const s of sites.slice(0, 5)) {

@@ -76,6 +76,29 @@ never is. Pass `types: 'all'` to hold the codecs to the same standard:
 expectNoLeaks([localCensus()], { types: 'all' });
 ```
 
+### What the platform does behind your back
+
+A codec that fails is closed by the platform, not by your code: the spec closes
+it *before* it invokes your error callback, so no `close()` call happens. The
+census reconciles live codecs against their own `state`, records that as
+`closedByPlatform`, and does not report it as a leak. Getting this wrong is how
+a leak detector invents leaks in an error-heavy pipeline.
+
+The mirror image is worth catching. Closing an already-closed codec throws
+`InvalidStateError` — the four codec types throw, the three frame types are
+idempotent — and from a floating `.finally()` that becomes an unhandled
+rejection no application code can catch. Those calls are counted in
+`overCloses`, with the line that made them:
+
+```
+3 close() call(s) threw — a codec was closed twice:
+  3x VideoDecoder: Cannot call 'close' on a closed codec (in worker)
+      at decodePump (pipeline.js:812:20)
+```
+
+It is a lifecycle defect, not a leak, so it never fails a check on its own.
+Pass `failOnOverClose: true` for code you own.
+
 Two things `types` deliberately does not do. It never hides an object the GC
 collected while it was still open — that is the definitive leak, and it fails
 the check whatever its type. And it never lets the report claim a clean bill of

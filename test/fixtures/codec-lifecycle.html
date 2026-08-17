@@ -1,0 +1,92 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>codec lifecycle: platform close and over-close</title>
+<script type="module">
+  // Two codec lifecycle events the application never gets a useful signal for.
+  //
+  // 1. The platform closes a codec that fails. Per the WebCodecs Close
+  //    algorithm the state is "closed" before the error callback runs, so no
+  //    close() call is ever made and nothing in JS observes the release.
+  // 2. Closing an already-closed codec throws InvalidStateError. In a library
+  //    that closes from a floating .finally() nobody can catch it.
+  //
+  // The census has to get both right: the first is not a leak, the second is a
+  // defect worth naming.
+
+  const results = { platformClosed: null, overClose: null, error: null };
+
+  // An unsupported-but-well-formed config, chosen by asking the platform which
+  // one it refuses. Per the spec, configure() with an unsupported config runs
+  // Close VideoDecoder with NotSupportedError — the same algorithm a decode
+  // failure runs, and the ordering this fixture is about: state is "closed"
+  // before the error callback fires, and no close() call is ever made.
+  //
+  // Chosen this way rather than by feeding garbage bytes: Chrome validates the
+  // keyframe header synchronously, so corrupt data throws from decode() instead
+  // of failing the way a real stream does, and which bytes it rejects is a
+  // codec-implementation detail that would rot.
+  const CANDIDATES = [
+    { codec: 'av01.0.15M.12', codedWidth: 640, codedHeight: 480 },
+    { codec: 'vp09.03.63.12', codedWidth: 640, codedHeight: 480 },
+    { codec: 'avc1.6E0034', codedWidth: 640, codedHeight: 480 },
+    { codec: 'vp8', codedWidth: 65535, codedHeight: 65535 },
+  ];
+
+  async function unsupportedConfig() {
+    for (const config of CANDIDATES) {
+      try {
+        const { supported } = await VideoDecoder.isConfigSupported(config);
+        if (!supported) return config;
+      } catch {
+        /* not a parseable config on this build; try the next */
+      }
+    }
+    return null;
+  }
+
+  async function forcePlatformClose() {
+    const config = await unsupportedConfig();
+    if (!config) throw new Error('this Chrome supports every candidate config');
+
+    const errors = [];
+    const decoder = new VideoDecoder({
+      output: (f) => f.close(),
+      error: (e) => errors.push(String(e)),
+    });
+    decoder.configure(config);
+
+    // Wait for the platform to give up on it.
+    for (let i = 0; i < 200 && decoder.state !== 'closed'; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+
+    return {
+      config: config.codec,
+      state: decoder.state,
+      errors: errors.length,
+      // Nothing in JS closed it. If the census says otherwise it inferred it.
+      closedByJs: false,
+    };
+  }
+
+  function forceOverClose() {
+    const decoder = new VideoDecoder({ output: () => {}, error: () => {} });
+    decoder.configure({ codec: 'vp8', codedWidth: 320, codedHeight: 240 });
+    decoder.close();
+    try {
+      decoder.close();
+      return { threw: false, message: null };
+    } catch (e) {
+      return { threw: true, message: e?.message ?? String(e) };
+    }
+  }
+
+  try {
+    results.platformClosed = await forcePlatformClose();
+    results.overClose = forceOverClose();
+  } catch (e) {
+    results.error = e?.message ?? String(e);
+  }
+
+  window.__done = results;
+</script>

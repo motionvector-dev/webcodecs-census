@@ -17,6 +17,7 @@ export type {
   LiveObject,
   MediaElementCensus,
   Origin,
+  OverCloseSite,
   Sample,
   TrackedType,
 } from './types';

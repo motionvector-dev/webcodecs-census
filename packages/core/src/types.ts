@@ -19,7 +19,17 @@ export type Origin =
   | 'received'; // arrived over postMessage; this context owns it now
 
 /** How an object left. Anything still live at snapshot time is unaccounted for. */
-export type Fate = 'closed' | 'transferred' | 'collectedUnclosed';
+export type Fate =
+  | 'closed'
+  | 'transferred'
+  | 'collectedUnclosed'
+  /**
+   * The platform closed a codec out from under the application — the spec's
+   * Close algorithm sets `[[state]]` to "closed" before it invokes the error
+   * callback, so no `close()` call is ever made. The resource went; this is
+   * not a leak.
+   */
+  | 'closedByPlatform';
 
 export interface LiveObject {
   type: TrackedType;
@@ -36,6 +46,20 @@ export interface LeakSite {
   stack: string;
   count: number;
   oldestAgeMs: number;
+}
+
+/**
+ * A `close()` that threw, and the line that called it. Closing an already
+ * closed codec throws `InvalidStateError`; from a floating `.finally()` that
+ * becomes an unhandled rejection no application code can catch, which is why
+ * counting it here is worth anything.
+ */
+export interface OverCloseSite {
+  type: TrackedType;
+  /** What the platform threw, e.g. "Cannot call 'close' on a closed codec". */
+  message: string;
+  stack: string;
+  count: number;
 }
 
 export interface MediaElementCensus {
@@ -80,6 +104,8 @@ export interface ContextCensus {
   collectedUnclosed: Partial<Record<TrackedType, number>>;
   /** Closed here but never seen entering — usually a missed receive path. */
   closedUnseen: number;
+  /** close() calls that threw. Not a leak — a lifecycle bug, and uncatchable. */
+  overCloses: OverCloseSite[];
   leakSites: LeakSite[];
   oldestLive: LiveObject[];
   mediaElements: MediaElementCensus;

@@ -10,6 +10,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A codec the platform closed was reported as a leak.** A codec that fails is
+  closed by the platform, not by JS — the spec's Close algorithm sets
+  `[[state]]` to `"closed"` *before* it invokes the error callback, so no
+  `close()` call ever reaches the instrumentation. That codec stayed counted
+  live and, once collected, was filed as `collectedUnclosed`: "definitively
+  leaked" for a resource the platform had already reclaimed. A detector that
+  invents leaks is worse than one that stays quiet. Live codecs are now
+  reconciled against their own `state`, and a platform close is recorded as the
+  new `closedByPlatform` fate.
 - `checkLeaks()` filtered `collectedUnclosed` by `types`, so the leak this tool
   calls the most definitive one there is could be dropped from the verdict.
   Found while dogfooding: a run ending with 47 live `VideoDecoder`s and ten
@@ -37,6 +46,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Over-close detection.** Closing an already-closed codec throws
+  `InvalidStateError` (measured on Chrome 151: the four codec types throw, the
+  three frame types are idempotent). From a library closing out of a floating
+  `.finally()` that becomes an unhandled rejection no application code can
+  catch — the platform reports it to nobody who can act. The census now counts
+  those calls with the line that made them, in `ContextCensus.overCloses` and
+  `LeakReport.overCloses`. It is a lifecycle defect, not a leak, so it is
+  always reported and only fails a check under `failOnOverClose: true` —
+  the usual cause is a library the failing app cannot fix.
 - `types: 'all'` on `checkLeaks()` / `expectNoLeaks()`, so enforcing the codecs
   does not mean spelling out all seven type names.
 - `LeakReport.unenforcedLive` and `LeakReport.enforced`: what was live but out

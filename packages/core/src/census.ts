@@ -23,6 +23,7 @@ import {
   type LiveObject,
   type MediaElementCensus,
   type Origin,
+  type OverCloseSite,
   type Sample,
   type TrackedType,
 } from './types';
@@ -62,6 +63,8 @@ interface State {
   left: Record<string, number>;
   collectedUnclosed: Record<string, number>;
   closedUnseen: number;
+  /** close() calls that threw, grouped by type, message and calling line. */
+  overCloses: Map<string, OverCloseSite>;
   nextId: number;
   /** Metadata only — never a strong reference, or we would cause the leak. */
   liveEntries: Map<number, Entry>;
@@ -93,6 +96,7 @@ function freshCounters() {
     left: {} as Record<string, number>,
     collectedUnclosed: {} as Record<string, number>,
     closedUnseen: 0,
+    overCloses: new Map<string, OverCloseSite>(),
     nextId: 1,
     liveEntries: new Map<number, Entry>(),
     idOf: new WeakMap<object, number>(),
@@ -194,7 +198,11 @@ function release(obj: unknown, fate: Fate): void {
     return;
   }
   const entry = state.liveEntries.get(id);
-  if (!entry) return; // already released; a double close is harmless
+  // Already released. Harmless to the count either way, but not harmless to the
+  // app: on the four codec types a second close() throws InvalidStateError,
+  // which `recordOverClose` catches on the way past. The frame types are
+  // idempotent and throw nothing, so there is nothing to record for them.
+  if (!entry) return;
   state.liveEntries.delete(id);
   finalizers?.unregister(obj as object);
   bump(state.left, key(entry.type, fate));
@@ -306,7 +314,19 @@ function patchConstructor(name: TrackedType): void {
   const proto = Original.prototype;
   if (!proto) return;
 
-  patchMethod(proto, 'close', (self) => release(self, 'closed'));
+  // A `close()` that throws is a lifecycle bug the platform reports to nobody
+  // useful. Closing an already-closed codec throws InvalidStateError (measured
+  // on Chrome 151; the four codec types throw, the frame types are idempotent),
+  // and in a library that closes from a floating `.finally` it surfaces as an
+  // unhandled rejection no application code can catch. Counted here, with the
+  // line that did it, because there is no other place to see it.
+  patchMethod(
+    proto,
+    'close',
+    (self) => release(self, 'closed'),
+    undefined,
+    (self, err) => recordOverClose(self, err),
+  );
 
   // clone() hands back an independent handle that needs its own close(), and it
   // does not go through the construct trap.
@@ -326,12 +346,21 @@ function patchMethod(
   name: string,
   before?: (self: any, args: unknown[]) => void,
   after?: (self: any, result: unknown) => void,
+  onThrow?: (self: any, err: unknown) => void,
 ): void {
   const original = proto[name];
   if (typeof original !== 'function' || original.__wccPatched) return;
   const patched = function (this: any, ...args: unknown[]) {
     before?.(this, args);
-    const result = original.apply(this, args);
+    let result: unknown;
+    try {
+      result = original.apply(this, args);
+    } catch (err) {
+      // Observed, never swallowed: the caller must still see what the platform
+      // threw, or instrumenting the app would change how it behaves.
+      onThrow?.(this, err);
+      throw err;
+    }
     after?.(this, result);
     return result;
   };
@@ -505,7 +534,18 @@ function mediaElementCensus(): MediaElementCensus {
   return { total, stalled, byReadyState };
 }
 
-/** Live codec queue depth and configured count — busy versus wedged. */
+/**
+ * Live codec queue depth and configured count — busy versus wedged — and the
+ * reconciliation that keeps a platform close from reading as a leak.
+ *
+ * A codec that fails is closed by the platform, not by JS: the spec's Close
+ * algorithm sets `[[state]]` to "closed" *before* it invokes the error
+ * callback, so no `close()` call ever reaches our patch. Left alone, that
+ * codec stays counted live and, once collected, is filed as
+ * `collectedUnclosed` — "definitively leaked" for a resource the platform
+ * already reclaimed. `state === 'closed'` is the only honest signal that it
+ * went, whoever closed it.
+ */
 function codecPressure(): { queued: number; configured: number } {
   let queued = 0;
   let configured = 0;
@@ -516,6 +556,11 @@ function codecPressure(): { queued: number; configured: number } {
       continue;
     }
     try {
+      if (c.state === 'closed') {
+        release(c, 'closedByPlatform');
+        state.codecs.delete(ref);
+        continue;
+      }
       if (c.state === 'configured') configured++;
       queued += c.decodeQueueSize ?? c.encodeQueueSize ?? 0;
     } catch {
@@ -581,6 +626,10 @@ function leakSites(): LeakSite[] {
 
 /** Snapshot this context only. */
 export function localCensus(): ContextCensus {
+  // Before counting anything: a codec the platform closed is not live, and
+  // saying so here rather than at the next sample tick keeps a census taken
+  // straight after a decode error from reporting a leak that is not one.
+  codecPressure();
   const t = now();
   const oldestLive: LiveObject[] = [...state.liveEntries.values()]
     .sort((a, b) => a.at - b.at)
@@ -600,6 +649,7 @@ export function localCensus(): ContextCensus {
     live: liveByType(),
     collectedUnclosed: { ...state.collectedUnclosed } as Partial<Record<TrackedType, number>>,
     closedUnseen: state.closedUnseen,
+    overCloses: [...state.overCloses.values()].sort((a, b) => b.count - a.count),
     leakSites: leakSites(),
     oldestLive,
     mediaElements: mediaElementCensus(),
@@ -646,6 +696,21 @@ export function installCensus(options: InstallOptions = {}): void {
 
 function stripUndefined<T extends object>(o: T): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+/**
+ * A close() that threw, grouped by the line that called it. Grouped because
+ * the thing doing it runs per frame: one site, one entry, a count beside it.
+ */
+function recordOverClose(self: unknown, err: unknown): void {
+  const type = isTracked(self);
+  if (!type) return;
+  const stack = captureStack();
+  const message = (err as Error)?.message ?? String(err);
+  const k = `${type}\u0000${message}\u0000${stack}`;
+  const found = state.overCloses.get(k);
+  if (found) found.count++;
+  else state.overCloses.set(k, { type, message, stack, count: 1 });
 }
 
 /** Record what could not be patched instead of aborting the whole install. */
