@@ -1,0 +1,21 @@
+// Type-checks every package's source in one pass, emitting nothing. The
+// per-package `tsconfig.build.json` files emit declarations for core and cdp;
+// mcp is bundled by esbuild alone, which strips types without checking them,
+// so this config is the only thing that reads them at all.
+//
+// mcp imports its siblings by package name, which resolve through the
+// workspace symlinks to their built `dist/*.d.ts` — so this checks the type
+// surface consumers actually get, and needs `npm run build` to have run first.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["packages/core/src", "packages/cdp/src", "packages/mcp/src"]
+}

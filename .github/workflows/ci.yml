@@ -11,6 +11,29 @@ on:
     - cron: '0 6 * * 1'
 
 jobs:
+  typecheck:
+    # Its own job, not a step in `test`: it needs no Chrome, so it answers in
+    # under a minute instead of after a browser download. The mcp package is
+    # bundled by esbuild alone, which strips types without reading them — this
+    # is the only thing that type-checks it at all.
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Builds first: mcp imports its siblings by package name, which resolve
+      # to their built declarations.
+      - run: npm run typecheck
+
   test:
     name: test (Chrome ${{ matrix.chrome }})
     runs-on: ubuntu-latest

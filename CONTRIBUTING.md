@@ -6,7 +6,20 @@
 npm install
 npm run build:all
 npm test
+npm run typecheck
 ```
+
+`typecheck` builds first, because the mcp package imports its siblings by
+package name and those resolve to their built declarations. It is the only
+thing that type-checks mcp at all — esbuild bundles it by stripping types
+without reading them.
+
+**In a git worktree, run `npm ci` inside the worktree before trusting it.** A
+worktree with no `node_modules` of its own resolves `@motionvector/*` upwards
+to the main checkout's build, so mcp gets type-checked against whatever version
+is built over there — reporting errors against code that is fine, or missing
+errors in code that is not. The tests are unaffected; they import their
+packages by relative path.
 
 Tests drive a real Chrome. They find one from the Puppeteer cache, or you can
 point at your own:
