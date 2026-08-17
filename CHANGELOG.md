@@ -29,6 +29,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `webcodecs_leak_sites` attributed only the default frame types, so an agent
   asking which line is leaking got nothing back for a codec leak. Attribution
   is not a verdict — it now covers every type unless one is named.
+- `npm run typecheck` pointed at a root `tsconfig.json` that was never
+  committed, so it failed instantly with TS5058 for anyone who ran it. The
+  config now exists and covers all three packages. This matters most for the
+  mcp package, which esbuild bundles by stripping types without reading them —
+  nothing had type-checked it since it was written.
 
 ### Added
 
@@ -39,6 +44,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `test/assert.test.mjs`, which pins the verdict layer against synthetic
   censuses — including a `VideoDecoder` collected without `close()`, which no
   browser test can produce on demand.
+- A `typecheck` CI job, so the script cannot rot unnoticed again. It needs no
+  Chrome, so it answers in under a minute.
 
 ## [0.2.1] - 2026-08-14
 
