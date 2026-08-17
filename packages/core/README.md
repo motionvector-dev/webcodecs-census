@@ -65,8 +65,15 @@ test('the editor releases every frame it decodes', async () => {
 });
 ```
 
-`checkLeaks()` returns the same information without throwing. `minAgeMs` ignores
-objects that may still legitimately be in flight.
+`checkLeaks()` returns the same information without throwing.
+
+`minAgeMs` ignores live objects younger than the threshold — a decode in flight
+is not a leak. It is applied to the verdict, not only to the sites the report
+prints, because the census carries the age of every live object (`liveAges`,
+oldest first, capped at `LIVE_AGES_CAP`). If a census predates 0.3.0 it has no
+ages; the report then leaves the counts unfiltered, sets `minAgeMsApplied` to
+false and names the contexts it could not filter, rather than letting an
+ignored option read as a clean bill of health.
 
 `types` decides what counts as live too long. It defaults to the frame-like
 types, because a long-lived decoder is normal and a long-lived frame almost

@@ -3,11 +3,18 @@
  * rather than something a human has to notice in a panel.
  */
 
-import { TRACKED } from './types';
+import { LIVE_AGES_CAP, TRACKED } from './types';
 import type { ContextCensus, LeakSite, OverCloseSite, TrackedType } from './types';
 
 export interface LeakReport {
   ok: boolean;
+  /**
+   * Whether `minAgeMs` reached the verdict. False when it was not asked for,
+   * or when a census was taken by a shim older than 0.3.0 and carries no ages
+   * — in which case the counts are unfiltered and the message says so, rather
+   * than an ignored option passing for a clean bill of health.
+   */
+  minAgeMsApplied: boolean;
   /** Live objects of the enforced types, summed across contexts. */
   live: Partial<Record<TrackedType, number>>;
   /** Live objects of the types `types` left out. Reported, never failed on. */
@@ -39,7 +46,11 @@ export interface LeakOptions {
   types?: TrackedType[] | 'all';
   /** Tolerated live count per type. A steady-state pipeline holds a few. */
   allow?: Partial<Record<TrackedType, number>>;
-  /** Ignore live objects younger than this — they may be legitimately in flight. */
+  /**
+   * Ignore live objects younger than this — they may be legitimately in
+   * flight. Applied to the verdict, not just to the reported sites: an option
+   * that quietly fails to change the outcome is worse than no option.
+   */
   minAgeMs?: number;
   /**
    * Fail when a `close()` threw. Off by default: the usual cause is a library
@@ -53,6 +64,38 @@ const DEFAULT_TYPES: TrackedType[] = ['VideoFrame', 'AudioData', 'ImageBitmap'];
 
 export function totalLive(censuses: ContextCensus[], type: TrackedType): number {
   return censuses.reduce((sum, c) => sum + (c.live[type] ?? 0), 0);
+}
+
+/**
+ * How many live objects of this type are at least `minAgeMs` old.
+ *
+ * Exact whenever the answer is decidable: the census reports ages oldest
+ * first, so a full array of ages that all clear the bar means "at least
+ * `LIVE_AGES_CAP`" — decisive against any tolerance below the cap. Past that,
+ * and for a census taken before ages existed, it returns the unfiltered count
+ * and records why: over-reporting is a false alarm someone can dismiss, while
+ * under-reporting is the one failure this tool must never have.
+ */
+function countLive(
+  c: ContextCensus,
+  type: TrackedType,
+  minAgeMs: number,
+  ignoredAge: string[],
+): number {
+  const total = c.live[type] ?? 0;
+  if (!minAgeMs || !total) return total;
+
+  const ages = c.liveAges?.[type];
+  if (!ages) {
+    if (!ignoredAge.includes(c.context)) ignoredAge.push(c.context);
+    return total;
+  }
+
+  const older = ages.filter((a) => a >= minAgeMs).length;
+  // The cap is only reached by a leak far larger than any tolerance, and every
+  // age we kept is an old one, so "at least this many" is the whole answer.
+  if (older === LIVE_AGES_CAP && total > LIVE_AGES_CAP) return total;
+  return older;
 }
 
 const counts = (m: Partial<Record<TrackedType, number>>) =>
@@ -76,13 +119,15 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
 
   const live: Partial<Record<TrackedType, number>> = {};
   const unenforcedLive: Partial<Record<TrackedType, number>> = {};
+  /** Contexts whose census predates `liveAges`, so `minAgeMs` cannot be applied. */
+  const ignoredAge: string[] = [];
   const collectedUnclosed: Partial<Record<TrackedType, number>> = {};
   const sites: (LeakSite & { context: string })[] = [];
   const overCloses: (OverCloseSite & { context: string })[] = [];
 
   for (const c of censuses) {
     for (const t of TRACKED) {
-      const n = c.live[t] ?? 0;
+      const n = countLive(c, t, minAgeMs, ignoredAge);
       if (n) {
         const bucket = enforced.includes(t) ? live : unenforcedLive;
         bucket[t] = (bucket[t] ?? 0) + n;
@@ -110,6 +155,7 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
 
   return {
     ok,
+    minAgeMsApplied: minAgeMs > 0 && ignoredAge.length === 0,
     live,
     unenforcedLive,
     collectedUnclosed,
@@ -127,6 +173,8 @@ export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {})
       sites,
       overCloses,
       allow,
+      minAgeMs,
+      ignoredAge,
     ),
   };
 }
@@ -142,7 +190,17 @@ function describe(
   sites: (LeakSite & { context: string })[],
   overCloses: (OverCloseSite & { context: string })[],
   allow: Partial<Record<TrackedType, number>>,
+  minAgeMs: number,
+  ignoredAge: string[],
 ): string {
+  const ageNote = ignoredAge.length
+    ? [
+        '',
+        `minAgeMs=${minAgeMs} was NOT applied in: ${ignoredAge.join(', ')}. ` +
+          'Those censuses come from a shim older than 0.3.0, which reported no ' +
+          'ages — the counts above are unfiltered. Upgrade the instrumented app.',
+      ]
+    : [];
   const unenforced = counts(unenforcedLive);
   const overClose = overCloses.length
     ? [
@@ -156,13 +214,19 @@ function describe(
     : [];
 
   if (ok) {
-    if (!unenforced && !overClose.length) return 'No leaked WebCodecs objects.';
-    if (!unenforced) return ['No leaked WebCodecs objects.', ...overClose].join('\n');
+    if (!unenforced && !overClose.length && !ageNote.length) {
+      return 'No leaked WebCodecs objects.';
+    }
+    if (!unenforced) {
+      return ['No leaked WebCodecs objects.', ...overClose, ...ageNote].join('\n');
+    }
     // An unqualified all-clear next to 47 live decoders is how this tool
     // reported clean on the exact leak it was pointed at.
     return (
       `No leaks in ${enforced.join(', ')} — but ${unenforced} still live and not enforced. ` +
-      `Pass types: 'all' to check those too.` + overClose.join('\n')
+      `Pass types: 'all' to check those too.` +
+      overClose.join('\n') +
+      ageNote.join('\n')
     );
   }
 
@@ -171,8 +235,13 @@ function describe(
     lines.push(`${collectedUnclosed[t]} ${t} garbage collected without close() — definitively leaked.`);
   }
   for (const t of over) {
-    lines.push(`${live[t]} ${t} still live (allowed ${allow[t] ?? 0}).`);
+    lines.push(
+      `${live[t]} ${t} still live (allowed ${allow[t] ?? 0}` +
+        (minAgeMs && !ignoredAge.length ? `, at least ${minAgeMs}ms old` : '') +
+        ').',
+    );
   }
+  lines.push(...ageNote.filter(Boolean));
   if (unenforced) {
     lines.push(`Not enforced, and still live: ${unenforced}. Pass types: 'all' to check those too.`);
   }

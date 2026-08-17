@@ -11,6 +11,13 @@ export const TRACKED = [
 
 export type TrackedType = (typeof TRACKED)[number];
 
+/**
+ * How many live-object ages a census reports per type. Any verdict with a
+ * tolerance below this is decided exactly; above it, the report says so rather
+ * than guessing.
+ */
+export const LIVE_AGES_CAP = 256;
+
 /** How an object entered this context. Provenance decides whether a leak is ours. */
 export type Origin =
   | 'constructed' // `new VideoFrame(...)` in this context
@@ -100,6 +107,13 @@ export interface ContextCensus {
   entered: Record<string, number>;
   left: Record<string, number>;
   live: Partial<Record<TrackedType, number>>;
+  /**
+   * Ages in ms of the live objects, per type, oldest first and capped at
+   * `LIVE_AGES_CAP`. `live` counts them; this says how long each has been
+   * held, which is what makes an age-filtered verdict exact rather than a
+   * count that ignores the filter it was given.
+   */
+  liveAges: Partial<Record<TrackedType, number[]>>;
   /** Collected by GC without close(). Unambiguous: the resource was held to the end. */
   collectedUnclosed: Partial<Record<TrackedType, number>>;
   /** Closed here but never seen entering — usually a missed receive path. */

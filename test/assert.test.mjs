@@ -14,14 +14,23 @@ import assert from 'node:assert/strict';
 import { checkLeaks, expectNoLeaks, summarize, TRACKED } from '../packages/core/dist/index.js';
 
 /** A census with only the fields the verdict layer reads. */
-function census({ context = 'main', live = {}, collectedUnclosed = {}, leakSites = [] } = {}) {
+function census({
+  context = 'main',
+  live = {},
+  liveAges = {},
+  collectedUnclosed = {},
+  leakSites = [],
+  overCloses = [],
+} = {}) {
   return {
     context,
     uptimeMs: 30_000,
     entered: {},
     left: {},
     live,
+    liveAges,
     collectedUnclosed,
+    overCloses,
     closedUnseen: 0,
     leakSites,
     oldestLive: [],
@@ -93,6 +102,67 @@ describe('a leaking VideoDecoder under the default types', () => {
     );
     assert.equal(report.sites.length, 1);
     assert.equal(report.sites[0].type, 'VideoDecoder');
+  });
+});
+
+describe('minAgeMs reaches the verdict, not just the reported sites', () => {
+  // Five frames: two held a long time, three that only just arrived.
+  const inFlight = () => [
+    census({
+      live: { VideoFrame: 5 },
+      liveAges: { VideoFrame: [5000, 4000, 40, 30, 20] },
+      leakSites: [site('VideoFrame', 5)],
+    }),
+  ];
+
+  test('young objects are excluded from the count that decides ok', () => {
+    const report = checkLeaks(inFlight(), { minAgeMs: 1000, allow: { VideoFrame: 2 } });
+    assert.equal(report.live.VideoFrame, 2, 'only the two old frames should count');
+    assert.equal(report.ok, true);
+    assert.equal(report.minAgeMsApplied, true);
+  });
+
+  test('and old ones still fail it', () => {
+    const report = checkLeaks(inFlight(), { minAgeMs: 1000 });
+    assert.equal(report.ok, false);
+    assert.match(report.message, /2 VideoFrame still live \(allowed 0, at least 1000ms old\)/);
+  });
+
+  test('a threshold above everything live is clean', () => {
+    const report = checkLeaks(inFlight(), { minAgeMs: 10_000 });
+    assert.equal(report.ok, true);
+    assert.equal(report.live.VideoFrame ?? 0, 0);
+  });
+
+  test('without minAgeMs nothing is filtered', () => {
+    const report = checkLeaks(inFlight());
+    assert.equal(report.live.VideoFrame, 5);
+    assert.equal(report.minAgeMsApplied, false);
+  });
+
+  test('a census with no ages says so instead of ignoring the option', () => {
+    const old = [census({ live: { VideoFrame: 5 }, leakSites: [site('VideoFrame', 5)] })];
+    delete old[0].liveAges;
+    const report = checkLeaks(old, { minAgeMs: 1000 });
+
+    assert.equal(report.minAgeMsApplied, false, 'it cannot have been applied');
+    assert.equal(report.live.VideoFrame, 5, 'unfiltered — never fewer than the truth');
+    assert.equal(report.ok, false);
+    assert.match(report.message, /minAgeMs=1000 was NOT applied in: main/);
+  });
+
+  test('a leak past the age cap is still decided, not guessed', () => {
+    const capped = [
+      census({
+        live: { VideoFrame: 9000 },
+        // What a real census carries: the oldest 256, every one of them old.
+        liveAges: { VideoFrame: Array.from({ length: 256 }, (_, i) => 60_000 - i) },
+        leakSites: [site('VideoFrame', 9000)],
+      }),
+    ];
+    const report = checkLeaks(capped, { minAgeMs: 1000 });
+    assert.equal(report.ok, false);
+    assert.equal(report.live.VideoFrame, 9000, 'the cap must not shrink a real leak');
   });
 });
 

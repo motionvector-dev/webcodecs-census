@@ -8,7 +8,7 @@ export {
   totalLive,
 } from './assert';
 export type { LeakOptions, LeakReport } from './assert';
-export { TRACKED } from './types';
+export { LIVE_AGES_CAP, TRACKED } from './types';
 export type {
   Activity,
   ContextCensus,

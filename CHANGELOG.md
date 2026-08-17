@@ -8,6 +8,29 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Fixed
+
+- **`minAgeMs` did not change the verdict.** It filtered the reported
+  allocation sites and nothing else: `ok` came from the unfiltered live counts,
+  so `expectNoLeakedFrames(census, { minAgeMs: 1000 })` — the recipe in our own
+  README — failed on frames that were 20ms old and still legitimately in
+  flight. An option that quietly fails to do what it says is the same class of
+  defect as the `types` filter dropping definitive leaks.
+
+  The fix puts the filter where the ages are. A census now reports
+  `liveAges`: the ages of the live objects per type, oldest first, capped at
+  `LIVE_AGES_CAP` (256). The verdict counts the ones at or past the threshold,
+  exactly. The cap is taken from the old end, so "every age we kept clears the
+  bar" answers any tolerance below the cap — a leak of 9000 frames is still
+  reported as 9000, never shrunk to 256.
+
+  A census from a shim older than 0.3.0 carries no ages. Rather than silently
+  ignoring the option, the report leaves the counts unfiltered — never fewer
+  than the truth — sets `minAgeMsApplied: false`, and names the contexts it
+  could not filter.
+
 ## [0.3.0] - 2026-08-17
 
 ### Fixed

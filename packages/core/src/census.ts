@@ -15,6 +15,7 @@
  */
 
 import {
+  LIVE_AGES_CAP,
   TRACKED,
   type Activity,
   type ContextCensus,
@@ -603,6 +604,30 @@ function liveByType(): Partial<Record<TrackedType, number>> {
   return live;
 }
 
+/**
+ * The ages of live objects, per type, oldest first — the exact input an
+ * age-filtered verdict needs, which a count alone cannot provide.
+ *
+ * Capped, and capped from the OLD end on purpose. A verdict asks "how many are
+ * at least this old", and an answer of "at least LIVE_AGES_CAP" settles that
+ * question for any tolerance below the cap. Keeping the oldest therefore costs
+ * nothing decidable while bounding a payload that would otherwise grow with
+ * the size of the leak — which is exactly when it is already too big.
+ */
+function liveAgesByType(t: number): Partial<Record<TrackedType, number[]>> {
+  const byType = new Map<TrackedType, number[]>();
+  for (const e of state.liveEntries.values()) {
+    const ages = byType.get(e.type);
+    if (ages) ages.push(Math.round(t - e.at));
+    else byType.set(e.type, [Math.round(t - e.at)]);
+  }
+  const out: Partial<Record<TrackedType, number[]>> = {};
+  for (const [type, ages] of byType) {
+    out[type] = ages.sort((a, b) => b - a).slice(0, LIVE_AGES_CAP);
+  }
+  return out;
+}
+
 function delta(current: Record<string, number>, previous: Record<string, number>) {
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(current)) {
@@ -674,6 +699,7 @@ export function localCensus(): ContextCensus {
     entered: { ...state.entered },
     left: { ...state.left },
     live: liveByType(),
+    liveAges: liveAgesByType(t),
     collectedUnclosed: { ...state.collectedUnclosed } as Partial<Record<TrackedType, number>>,
     closedUnseen: state.closedUnseen,
     overCloses: [...state.overCloses.values()].sort((a, b) => b.count - a.count),
