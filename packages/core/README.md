@@ -213,7 +213,10 @@ release is traceable to the commit and workflow that built it.
 
 ## Documentation
 
-Full documentation, the two-phase worker injection, and the honest limits:
-**[github.com/motionvector-dev/webcodecs-census](https://github.com/motionvector-dev/webcodecs-census)**
+Full reference, the two-phase worker injection, and the honest limits:
+**[motionvector-dev.github.io/webcodecs-census](https://motionvector-dev.github.io/webcodecs-census/)**
+
+Source and issues:
+[github.com/motionvector-dev/webcodecs-census](https://github.com/motionvector-dev/webcodecs-census)
 
 MIT

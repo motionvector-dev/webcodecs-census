@@ -10,6 +10,7 @@
 
 **Find leaked `VideoFrame`s, `AudioData` and codecs in a WebCodecs app — including inside Web Workers — and get the line of code that allocated them.**
 
+[**Documentation**](https://motionvector-dev.github.io/webcodecs-census/) &nbsp;·&nbsp;
 [Why it's hard](#why-this-is-hard-and-why-it-didnt-exist) &nbsp;·&nbsp;
 [Use from an agent](#use-it-from-an-agent) &nbsp;·&nbsp;
 [Use in CI](#use-it-in-ci) &nbsp;·&nbsp;
@@ -160,7 +161,7 @@ import { expectNoLeakedFrames } from '@motionvector/webcodecs-census';
 
 test('the editor releases every frame it decodes', async () => {
   await playThroughTimeline();
-  expectNoLeakedFrames(await session.census(), { minAgeMs: 1000 });
+  expectNoLeakedFrames(await session.census(), { allow: { VideoFrame: 2 } });
 });
 ```
 
@@ -248,6 +249,14 @@ The core makes no network requests of any kind and has no runtime dependencies.
 - The message scanner walks 3 levels and 64 keys. A frame buried deeper arrives uncounted and shows up as `closedUnseen`.
 - Patch mode changes `self.location` inside wrapped workers to the loader blob URL. Workers using `import.meta.url` are unaffected; workers building paths from `self.location` are not.
 - Exact mode cannot share a tab with an open DevTools window. Chrome allows one debugger client.
+
+## Documentation
+
+The full reference lives at
+**[motionvector-dev.github.io/webcodecs-census](https://motionvector-dev.github.io/webcodecs-census/)**
+— the assertion API field by field, the CDP driver, the MCP server, the
+extension, CI recipes, and the limits above in more detail. Its source is
+[`docs/`](./docs), which is plain HTML with no build step.
 
 ## Development
 

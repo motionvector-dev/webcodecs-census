@@ -100,6 +100,10 @@ debugging port beyond localhost.
 
 ## Documentation
 
-**[github.com/motionvector-dev/webcodecs-census](https://github.com/motionvector-dev/webcodecs-census)**
+Full reference, tool by tool:
+**[motionvector-dev.github.io/webcodecs-census](https://motionvector-dev.github.io/webcodecs-census/mcp.html)**
+
+Source and issues:
+[github.com/motionvector-dev/webcodecs-census](https://github.com/motionvector-dev/webcodecs-census)
 
 MIT

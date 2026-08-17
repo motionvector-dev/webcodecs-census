@@ -322,9 +322,9 @@ if (!report.ok) console.error(report.message);</code></pre>
             <td><code>number</code></td>
             <td><code>0</code></td>
             <td>
-              Drops allocation sites whose oldest object is younger than this from
-              <code>report.sites</code>. See the note below — it filters the attribution, not the
-              verdict.
+              Ignores live objects younger than this — a decode in flight is not a leak. Decides
+              the verdict, not just the printed attribution <em>(v0.3.1; before that it filtered
+              <code>report.sites</code> only)</em>.
             </td>
           </tr>
           <tr>
@@ -342,14 +342,24 @@ if (!report.ok) console.error(report.message);</code></pre>
     </div>
 
     <div class="note">
-      <span class="label">What <code>minAgeMs</code> actually does</span>
+      <span class="label">How <code>minAgeMs</code> stays exact</span>
       <p>
-        As of v0.2.1 it is applied to <code>report.sites</code> only. It does not filter
-        <code>report.live</code>, and <code>report.ok</code> is computed from
-        <code>report.live</code> — so raising <code>minAgeMs</code> shortens the list of
-        allocation sites in the message without changing pass or fail. If frames that are
-        legitimately in flight are failing your check, raise <code>allow</code>, or take the
-        census at a quieter moment.
+        The census carries <code>liveAges</code>: the age of every live object, per type, oldest
+        first, capped at <code>liveAgesCap</code> (256). Keeping the <em>oldest</em> is what makes
+        the count exact — anything dropped is younger than the youngest age kept, so it cannot
+        clear a threshold the kept ages already fall below.
+      </p>
+      <p>
+        The one exception is saturation, where every kept age clears the bar. There the count is
+        an honest lower bound — <code>at least 256 VideoFrame still live … 9000 live in
+        total</code> — with the exact total in <code>report.liveBounded</code>. The verdict is the
+        same either way; only the claim changes.
+      </p>
+      <p>
+        A census taken by a shim older than v0.3.1 carries no ages. Rather than ignore the option
+        silently, the report leaves the counts unfiltered — never fewer than the truth — sets
+        <code>minAgeMsApplied</code> to <code>false</code>, and names the contexts it could not
+        filter.
       </p>
     </div>
 
@@ -360,7 +370,9 @@ if (!report.ok) console.error(report.message);</code></pre>
         <thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
         <tbody>
           <tr><td><code>ok</code></td><td><code>boolean</code></td><td>The verdict. See below for exactly what it is computed from.</td></tr>
-          <tr><td><code>live</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Live objects <strong>of the enforced types</strong>, summed across contexts.</td></tr>
+          <tr><td><code>live</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Live objects <strong>of the enforced types</strong>, summed across contexts. Age-filtered when <code>minAgeMs</code> asked for it.</td></tr>
+          <tr><td><code>liveBounded</code> <em>(v0.3.1)</em></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Types where <code>live</code> is "at least this many" because the age filter saturated the census cap. The value is the exact total live count.</td></tr>
+          <tr><td><code>minAgeMsApplied</code> <em>(v0.3.1)</em></td><td><code>boolean</code></td><td>Whether <code>minAgeMs</code> reached the verdict. False when it was not asked for, or when a census carries no ages.</td></tr>
           <tr><td><code>unenforcedLive</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Live objects of the types <code>types</code> left out. Reported, never failed on.</td></tr>
           <tr><td><code>collectedUnclosed</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>GC'd without <code>close()</code>, across <strong>every</strong> tracked type. <code>types</code> cannot filter this away.</td></tr>
           <tr><td><code>enforced</code></td><td><code>TrackedType[]</code></td><td>What <code>types</code> resolved to.</td></tr>
@@ -574,6 +586,8 @@ Held by:
           <tr><td><code>entered</code></td><td><code>Record&lt;string, number&gt;</code></td><td>Keyed <code>Type:origin</code>, e.g. <code>VideoFrame:decoded</code>.</td></tr>
           <tr><td><code>left</code></td><td><code>Record&lt;string, number&gt;</code></td><td>Keyed <code>Type:fate</code> — <code>closed</code>, <code>transferred</code>, or <code>closedByPlatform</code> (v0.3.0).</td></tr>
           <tr><td><code>live</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Open right now, by type.</td></tr>
+          <tr><td><code>liveAges</code> <em>(v0.3.1)</em></td><td><code>Partial&lt;Record&lt;TrackedType, number[]&gt;&gt;</code></td><td>Ages in ms of the live objects, per type, oldest first and capped at <code>liveAgesCap</code>.</td></tr>
+          <tr><td><code>liveAgesCap</code> <em>(v0.3.1)</em></td><td><code>number</code></td><td>The cap <code>liveAges</code> was truncated at, carried so a saturated record says what it is.</td></tr>
           <tr><td><code>collectedUnclosed</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Collected by GC without <code>close()</code>. Unambiguous.</td></tr>
           <tr><td><code>closedUnseen</code></td><td><code>number</code></td><td>Closed here but never seen entering — usually a receive path the message scanner missed.</td></tr>
           <tr><td><code>overCloses</code> <em>(v0.3.0)</em></td><td><code>OverCloseSite[]</code></td><td><code>close()</code> calls that threw, worst first. A lifecycle bug, not a leak.</td></tr>
