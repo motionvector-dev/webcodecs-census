@@ -18,9 +18,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `close()` call ever reaches the instrumentation. That codec stayed counted
   live and, once collected, was filed as `collectedUnclosed`: "definitively
   leaked" for a resource the platform had already reclaimed. A detector that
-  invents leaks is worse than one that stays quiet. Live codecs are now
-  reconciled against their own `state`, and a platform close is recorded as the
-  new `closedByPlatform` fate.
+  invents leaks is worse than one that stays quiet. The census now reconciles a
+  codec against its own `state` inside the error callback — the moment the
+  release has already happened — and records it as the new `closedByPlatform`
+  fate. Doing it only at the next sample tick loses a race with the GC that
+  Chrome on Linux loses routinely.
 - `checkLeaks()` filtered `collectedUnclosed` by `types`, so the leak this tool
   calls the most definitive one there is could be dropped from the verdict.
   Found while dogfooding: a run ending with 47 live `VideoDecoder`s and ten

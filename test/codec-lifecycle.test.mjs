@@ -36,7 +36,12 @@ describe('codec lifecycle', { skip: chromePath ? false : 'no Chrome for Testing 
       // --expose-gc so the finalizer path can be driven rather than waited on.
       args: [...ciArgs(), '--js-flags=--expose-gc'],
     });
-    session = await attach({ browserURL: chrome.browserURL, install: { sampleIntervalMs: 100 } });
+    // Sampling deliberately far apart: a sample tick also reconciles codec
+    // state, and a fast one would let the census pass this suite by luck on a
+    // machine where the tick beats the GC. It did exactly that locally while
+    // failing on Linux CI. With the sampler out of reach, only reconciliation
+    // at the error callback can save it.
+    session = await attach({ browserURL: chrome.browserURL, install: { sampleIntervalMs: 30_000 } });
     await session.navigate(fixtures.origin + '/codec-lifecycle.html');
 
     done = JSON.parse(

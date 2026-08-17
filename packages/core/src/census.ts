@@ -240,7 +240,12 @@ const isTracked = (v: unknown): TrackedType | null => {
  * constructor: the platform creates them and hands them to the `output`
  * callback. Counting only `new VideoFrame()` misses essentially all of them.
  */
-function wrapCodecInit(init: any, birthSite: string, emits: TrackedType | null): any {
+function wrapCodecInit(
+  init: any,
+  birthSite: string,
+  emits: TrackedType | null,
+  holder: { codec: any },
+): any {
   if (!init || typeof init !== 'object') return init;
   const { output, error } = init;
   if (typeof output !== 'function') return init;
@@ -263,6 +268,19 @@ function wrapCodecInit(init: any, birthSite: string, emits: TrackedType | null):
       typeof error === 'function'
         ? function (this: unknown, e: unknown) {
             state.activity.errors++;
+            // The spec closes the codec at step 2 and calls this at step 4, so
+            // the resource is already gone. Record it HERE rather than at the
+            // next sample tick: the codec is usually unreachable the moment
+            // this callback returns, and a GC that runs first would file it as
+            // collectedUnclosed — a leak report for something already
+            // reclaimed. Chrome on Linux loses that race routinely.
+            try {
+              if (holder.codec && holder.codec.state === 'closed') {
+                release(holder.codec, 'closedByPlatform');
+              }
+            } catch {
+              /* reading state on a dead codec is not worth an exception here */
+            }
             return error.call(this, e);
           }
         : error,
@@ -292,18 +310,27 @@ function patchConstructor(name: TrackedType): void {
   const Patched = new Proxy(Original, {
     construct(target, args, newTarget) {
       const site = isCodec ? captureStack() : '';
+      // The error callback needs the codec it belongs to, and the codec does
+      // not exist until Reflect.construct returns. One box, filled in after.
+      const holder = { codec: null as any };
       const patchedArgs = isCodec
         ? [
             wrapCodecInit(
               args[0],
               `${site}\n    (frame emitted by this ${name})`,
               CODEC_EMITS[name] ?? null,
+              holder,
             ),
             ...args.slice(1),
           ]
         : args;
       const obj = Reflect.construct(target, patchedArgs, newTarget);
-      if (isCodec) state.codecs.add(new WeakRef(obj));
+      if (isCodec) {
+        // A WeakRef, so the holder cannot be what keeps the codec alive.
+        const weak = new WeakRef(obj);
+        Object.defineProperty(holder, 'codec', { get: () => weak.deref() });
+        state.codecs.add(weak);
+      }
       track(name, obj, 'constructed');
       return obj;
     },
