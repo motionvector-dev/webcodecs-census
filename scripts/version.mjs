@@ -66,6 +66,25 @@ for (const dir of PACKAGES) {
   console.log(`  ${pkg.name} -> ${next}`);
 }
 
+// Two version strings live in source rather than package.json: the census
+// stamps every payload with one, and the MCP server announces the other on the
+// wire. Nothing rewrote them here, so both said 0.1.0 for two releases.
+const STAMPS = [
+  { path: 'packages/core/src/census.ts', re: /(export const VERSION = ')[^']+(')/ },
+  { path: 'packages/mcp/src/index.ts', re: /(name: 'webcodecs-census', version: ')[^']+(')/ },
+];
+
+for (const { path, re } of STAMPS) {
+  const src = readFileSync(path, 'utf8');
+  // Loudly, not silently: a pattern that stops matching is how they went stale.
+  if (!re.test(src)) {
+    console.error(`\n  ${path} no longer matches its version pattern.\n  Fix scripts/version.mjs before releasing, or the stamp ships wrong.\n`);
+    process.exit(1);
+  }
+  writeFileSync(path, src.replace(re, `$1${next}$2`));
+  console.log(`  ${path} -> ${next}`);
+}
+
 // Promote the Unreleased section rather than inventing notes: the release body
 // is generated from this file, so an empty section is a release with no notes.
 const CHANGELOG = 'CHANGELOG.md';
