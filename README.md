@@ -166,6 +166,13 @@ test('the editor releases every frame it decodes', async () => {
 
 `checkLeaks()` returns the same information without throwing. `minAgeMs` ignores objects that may still legitimately be in flight.
 
+`types` decides what counts as live too long, and defaults to the frame-like types — a long-lived decoder is normal, a long-lived frame almost never is. Pass `types: 'all'` to hold the codecs to the same standard. Whatever you pass, an object the GC collected while it was still open fails the check, and a type left out of `types` is named in the message rather than quietly reported clean:
+
+```
+No leaks in VideoFrame, AudioData, ImageBitmap — but VideoDecoder=47 still
+live and not enforced. Pass types: 'all' to check those too.
+```
+
 ## The timeline, and why a snapshot lies
 
 A static count answers "how many are live". It cannot answer "was the pipeline busy when playback stalled" — and that difference matters. In the app this was built against, live decoder count did **not** predict failure: the highest count succeeded and lower counts stalled. A snapshot would have sent you after a resource-exhaustion bug that wasn't there.

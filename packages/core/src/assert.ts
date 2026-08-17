@@ -3,14 +3,22 @@
  * rather than something a human has to notice in a panel.
  */
 
+import { TRACKED } from './types';
 import type { ContextCensus, LeakSite, TrackedType } from './types';
 
 export interface LeakReport {
   ok: boolean;
-  /** Live objects, summed across contexts, by type. */
+  /** Live objects of the enforced types, summed across contexts. */
   live: Partial<Record<TrackedType, number>>;
-  /** GC'd without close(), summed across contexts. Always a genuine leak. */
+  /** Live objects of the types `types` left out. Reported, never failed on. */
+  unenforcedLive: Partial<Record<TrackedType, number>>;
+  /**
+   * GC'd without close(), summed across contexts and across every tracked
+   * type. `types` cannot filter this one away — see `checkLeaks`.
+   */
   collectedUnclosed: Partial<Record<TrackedType, number>>;
+  /** The types `types` resolved to. */
+  enforced: TrackedType[];
   /** Allocation sites holding live objects, worst first. */
   sites: (LeakSite & { context: string })[];
   message: string;
@@ -18,10 +26,11 @@ export interface LeakReport {
 
 export interface LeakOptions {
   /**
-   * Types to enforce. Defaults to the frame-like types, because a long-lived
-   * decoder is normal and a long-lived frame almost never is.
+   * Types to enforce, or `'all'` for every tracked type. Defaults to the
+   * frame-like types, because a long-lived decoder is normal and a long-lived
+   * frame almost never is.
    */
-  types?: TrackedType[];
+  types?: TrackedType[] | 'all';
   /** Tolerated live count per type. A steady-state pipeline holds a few. */
   allow?: Partial<Record<TrackedType, number>>;
   /** Ignore live objects younger than this — they may be legitimately in flight. */
@@ -34,48 +43,86 @@ export function totalLive(censuses: ContextCensus[], type: TrackedType): number 
   return censuses.reduce((sum, c) => sum + (c.live[type] ?? 0), 0);
 }
 
-/** Build a report without throwing. `checkLeaks(...).ok` is the boolean form. */
+const counts = (m: Partial<Record<TrackedType, number>>) =>
+  Object.entries(m)
+    .filter(([, n]) => n)
+    .map(([t, n]) => `${t}=${n}`)
+    .join(' ');
+
+/**
+ * Build a report without throwing. `checkLeaks(...).ok` is the boolean form.
+ *
+ * `types` narrows what counts as *live too long*. It deliberately does not
+ * narrow objects the GC collected while they were still open: that is the
+ * definitive leak, and a filter aimed at live frames must not hide a decoder
+ * that was dropped on the floor.
+ */
 export function checkLeaks(censuses: ContextCensus[], options: LeakOptions = {}): LeakReport {
-  const types = options.types ?? DEFAULT_TYPES;
+  const enforced = options.types === 'all' ? [...TRACKED] : options.types ?? DEFAULT_TYPES;
   const allow = options.allow ?? {};
   const minAgeMs = options.minAgeMs ?? 0;
 
   const live: Partial<Record<TrackedType, number>> = {};
+  const unenforcedLive: Partial<Record<TrackedType, number>> = {};
   const collectedUnclosed: Partial<Record<TrackedType, number>> = {};
   const sites: (LeakSite & { context: string })[] = [];
 
   for (const c of censuses) {
-    for (const t of types) {
-      if (c.live[t]) live[t] = (live[t] ?? 0) + c.live[t]!;
+    for (const t of TRACKED) {
+      const n = c.live[t] ?? 0;
+      if (n) {
+        const bucket = enforced.includes(t) ? live : unenforcedLive;
+        bucket[t] = (bucket[t] ?? 0) + n;
+      }
       if (c.collectedUnclosed[t]) {
         collectedUnclosed[t] = (collectedUnclosed[t] ?? 0) + c.collectedUnclosed[t]!;
       }
     }
     for (const s of c.leakSites) {
-      if (types.includes(s.type) && s.oldestAgeMs >= minAgeMs) {
+      if (enforced.includes(s.type) && s.oldestAgeMs >= minAgeMs) {
         sites.push({ ...s, context: c.context });
       }
     }
   }
   sites.sort((a, b) => b.count - a.count);
 
-  const over = types.filter((t) => (live[t] ?? 0) > (allow[t] ?? 0));
-  const collected = types.filter((t) => (collectedUnclosed[t] ?? 0) > 0);
+  const over = enforced.filter((t) => (live[t] ?? 0) > (allow[t] ?? 0));
+  const collected = TRACKED.filter((t) => (collectedUnclosed[t] ?? 0) > 0);
   const ok = over.length === 0 && collected.length === 0;
 
-  return { ok, live, collectedUnclosed, sites, message: describe(ok, over, collected, live, collectedUnclosed, sites, allow) };
+  return {
+    ok,
+    live,
+    unenforcedLive,
+    collectedUnclosed,
+    enforced,
+    sites,
+    message: describe(ok, over, collected, enforced, live, unenforcedLive, collectedUnclosed, sites, allow),
+  };
 }
 
 function describe(
   ok: boolean,
   over: TrackedType[],
   collected: TrackedType[],
+  enforced: TrackedType[],
   live: Partial<Record<TrackedType, number>>,
+  unenforcedLive: Partial<Record<TrackedType, number>>,
   collectedUnclosed: Partial<Record<TrackedType, number>>,
   sites: (LeakSite & { context: string })[],
   allow: Partial<Record<TrackedType, number>>,
 ): string {
-  if (ok) return 'No leaked WebCodecs objects.';
+  const unenforced = counts(unenforcedLive);
+
+  if (ok) {
+    if (!unenforced) return 'No leaked WebCodecs objects.';
+    // An unqualified all-clear next to 47 live decoders is how this tool
+    // reported clean on the exact leak it was pointed at.
+    return (
+      `No leaks in ${enforced.join(', ')} — but ${unenforced} still live and not enforced. ` +
+      `Pass types: 'all' to check those too.`
+    );
+  }
 
   const lines: string[] = [];
   for (const t of collected) {
@@ -83,6 +130,9 @@ function describe(
   }
   for (const t of over) {
     lines.push(`${live[t]} ${t} still live (allowed ${allow[t] ?? 0}).`);
+  }
+  if (unenforced) {
+    lines.push(`Not enforced, and still live: ${unenforced}. Pass types: 'all' to check those too.`);
   }
   if (sites.length) {
     lines.push('', 'Held by:');
@@ -112,7 +162,7 @@ export function expectNoLeakedFrames(censuses: ContextCensus[], options: LeakOpt
  * full census is large and mostly stacks.
  */
 export function summarize(censuses: ContextCensus[]): string {
-  const report = checkLeaks(censuses, { types: ['VideoFrame', 'AudioData', 'ImageBitmap'] });
+  const report = checkLeaks(censuses);
   const lines = [`${censuses.length} context(s): ${censuses.map((c) => c.context).join(', ')}`];
 
   for (const c of censuses) {

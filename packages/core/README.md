@@ -68,6 +68,25 @@ test('the editor releases every frame it decodes', async () => {
 `checkLeaks()` returns the same information without throwing. `minAgeMs` ignores
 objects that may still legitimately be in flight.
 
+`types` decides what counts as live too long. It defaults to the frame-like
+types, because a long-lived decoder is normal and a long-lived frame almost
+never is. Pass `types: 'all'` to hold the codecs to the same standard:
+
+```js
+expectNoLeaks([localCensus()], { types: 'all' });
+```
+
+Two things `types` deliberately does not do. It never hides an object the GC
+collected while it was still open — that is the definitive leak, and it fails
+the check whatever its type. And it never lets the report claim a clean bill of
+health for a type it did not look at: an unenforced type with live objects is
+named in the message.
+
+```
+No leaks in VideoFrame, AudioData, ImageBitmap — but VideoDecoder=47 still
+live and not enforced. Pass types: 'all' to check those too.
+```
+
 ## What it counts, and why that is not obvious
 
 Tracked: `VideoDecoder`, `VideoEncoder`, `AudioDecoder`, `AudioEncoder`,

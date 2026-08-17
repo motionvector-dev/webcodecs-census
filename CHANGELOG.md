@@ -8,6 +8,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `checkLeaks()` filtered `collectedUnclosed` by `types`, so the leak this tool
+  calls the most definitive one there is could be dropped from the verdict.
+  Found while dogfooding: a run ending with 47 live `VideoDecoder`s and ten
+  collected without `close()` printed "No leaked WebCodecs objects." The shim
+  saw all of it and warned on the console; the assertion API filtered it out.
+  A GC'd-unclosed object of any tracked type now fails the check regardless of
+  `types`, which can turn a previously passing suite red — correctly.
+- `checkLeaks()` and `summarize()` no longer print an unqualified all-clear
+  while an unenforced type holds live objects. The message now names them:
+  `No leaks in VideoFrame, AudioData, ImageBitmap — but VideoDecoder=47 still
+  live and not enforced.`
+- `webcodecs_leak_sites` attributed only the default frame types, so an agent
+  asking which line is leaking got nothing back for a codec leak. Attribution
+  is not a verdict — it now covers every type unless one is named.
+
+### Added
+
+- `types: 'all'` on `checkLeaks()` / `expectNoLeaks()`, so enforcing the codecs
+  does not mean spelling out all seven type names.
+- `LeakReport.unenforcedLive` and `LeakReport.enforced`: what was live but out
+  of scope, and what the filter resolved to.
+- `test/assert.test.mjs`, which pins the verdict layer against synthetic
+  censuses — including a `VideoDecoder` collected without `close()`, which no
+  browser test can produce on demand.
+
 ## [0.2.1] - 2026-08-14
 
 ### Added
