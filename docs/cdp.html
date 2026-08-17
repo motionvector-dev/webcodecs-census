@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CDP driver — WebCodecs Census</title>
+<meta name="description" content="Instrument a page and every one of its Web Workers over the Chrome DevTools Protocol, without changing the app.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%235eead4'/%3E%3Cpath d='M4 5h8M4 8h5M4 11h7' stroke='%2304211d' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  // Before first paint, so a chosen theme does not flash the other one.
+  try {
+    var t = localStorage.getItem('wcc-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<style>
+  /* --- Palette ---------------------------------------------------------
+     Light is the bare :root so a page with no theme signal still has one.
+     Dark is defined twice on purpose: once behind prefers-color-scheme for
+     the "System" setting, once behind [data-theme] so the toggle wins. */
+  :root {
+    --ground: #fbfbfa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --ink: #18181b;
+    --ink-2: #3f3f46;
+    --ink-3: #71717a;
+    --accent: #0d7c6d;
+    --accent-ink: #ffffff;
+    --accent-wash: #0d7c6d14;
+    --code-ink: #27272a;
+    --shadow: 0 1px 2px #18181b0f, 0 8px 24px -16px #18181b26;
+    --light-only: block;
+    --dark-only: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #000000;
+      --surface: #050506;
+      --surface-2: #101012;
+      --line: #232327;
+      --line-strong: #34343a;
+      --ink: #f4f4f5;
+      --ink-2: #b8b8c0;
+      --ink-3: #85858f;
+      --accent: #5eead4;
+      --accent-ink: #04211d;
+      --accent-wash: #5eead414;
+      --code-ink: #d8d8e0;
+      --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+      --light-only: none;
+      --dark-only: block;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #000000;
+    --surface: #050506;
+    --surface-2: #101012;
+    --line: #232327;
+    --line-strong: #34343a;
+    --ink: #f4f4f5;
+    --ink-2: #b8b8c0;
+    --ink-3: #85858f;
+    --accent: #5eead4;
+    --accent-ink: #04211d;
+    --accent-wash: #5eead414;
+    --code-ink: #d8d8e0;
+    --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+    --light-only: none;
+    --dark-only: block;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16.5px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "kern" 1;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* --- Header ---------------------------------------------------------- */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header.site .wrap {
+    display: flex; align-items: center; gap: 1rem 1.5rem;
+    flex-wrap: wrap; padding-top: .85rem; padding-bottom: .85rem;
+  }
+  .brand {
+    font-weight: 620; letter-spacing: -.015em; color: var(--ink);
+    text-decoration: none; font-size: .98rem; white-space: nowrap;
+  }
+  .brand span { color: var(--ink-3); font-weight: 400; }
+  nav.site { display: flex; flex-wrap: wrap; gap: .15rem .35rem; margin-right: auto; }
+  nav.site a {
+    color: var(--ink-3); text-decoration: none; font-size: .875rem;
+    padding: .25rem .5rem; border-radius: .35rem; white-space: nowrap;
+  }
+  nav.site a:hover { color: var(--ink); background: var(--surface-2); }
+  nav.site a[aria-current="page"] { color: var(--accent); background: var(--accent-wash); }
+
+  /* --- Theme toggle ---------------------------------------------------- */
+  .theme {
+    display: inline-flex; border: 1px solid var(--line); border-radius: .45rem;
+    overflow: hidden; background: var(--surface);
+  }
+  .theme button {
+    font: inherit; font-size: .74rem; letter-spacing: .02em;
+    padding: .3rem .55rem; border: 0; background: transparent;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .theme button + button { border-left: 1px solid var(--line); }
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); }
+
+  /* --- Typography ------------------------------------------------------ */
+  main { padding: 3rem 0 5rem; }
+  .eyebrow {
+    font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 .75rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 1.3rem + 3vw, 3rem); line-height: 1.08;
+    letter-spacing: -.03em; font-weight: 640; margin: 0 0 1rem;
+  }
+  h2 {
+    font-size: clamp(1.3rem, 1.1rem + .8vw, 1.6rem); line-height: 1.2;
+    letter-spacing: -.02em; font-weight: 620;
+    margin: 3.5rem 0 1rem; padding-top: 1.75rem; border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 1.05rem; letter-spacing: -.01em; font-weight: 620;
+    margin: 2.25rem 0 .6rem;
+  }
+  h4 { font-size: .95rem; font-weight: 620; margin: 1.75rem 0 .4rem; }
+  p, li { color: var(--ink-2); }
+  .lede { font-size: 1.15rem; line-height: 1.55; color: var(--ink); max-width: 46rem; }
+  strong { color: var(--ink); font-weight: 620; }
+  a { color: var(--accent); text-underline-offset: .18em; text-decoration-thickness: 1px; }
+  ul, ol { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  li::marker { color: var(--ink-3); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 3rem 0; }
+
+  /* --- Code ------------------------------------------------------------ */
+  code, pre, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .855em;
+  }
+  :not(pre) > code {
+    background: var(--surface-2); color: var(--code-ink);
+    padding: .12em .35em; border-radius: .3rem;
+    border: 1px solid var(--line);
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: .6rem; padding: 1rem 1.1rem; margin: 1.25rem 0;
+    overflow-x: auto; line-height: 1.55; color: var(--code-ink);
+    box-shadow: var(--shadow);
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  pre.out { background: var(--surface-2); box-shadow: none; color: var(--ink-2); }
+
+  /* --- Tables ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; margin: 1.25rem 0; border-radius: .6rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: .92rem; }
+  th, td {
+    text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--ink-2);
+  }
+  th {
+    color: var(--ink); font-weight: 600; font-size: .8rem;
+    letter-spacing: .04em; text-transform: uppercase;
+    border-bottom-color: var(--line-strong);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { white-space: nowrap; }
+
+  /* --- Callouts -------------------------------------------------------- */
+  .note {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--surface); border-radius: .5rem;
+    padding: .9rem 1.1rem; margin: 1.5rem 0;
+  }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    display: block; font-size: .72rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+    margin-bottom: .35rem;
+  }
+
+  /* --- Card grid ------------------------------------------------------- */
+  .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 2rem 0; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    border: 1px solid var(--line); border-radius: .6rem;
+    background: var(--surface); padding: 1.1rem 1.2rem;
+  }
+  .card:hover { border-color: var(--line-strong); }
+  .card h3 { margin: 0 0 .3rem; font-size: .98rem; color: var(--ink); }
+  .card p { margin: 0; font-size: .9rem; color: var(--ink-3); }
+
+  /* --- Figures --------------------------------------------------------- */
+  figure { margin: 2rem 0; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  img.only-light { display: var(--light-only); }
+  img.only-dark { display: var(--dark-only); }
+  figcaption { font-size: .85rem; color: var(--ink-3); text-align: center; margin-top: .75rem; }
+
+  /* --- Footer ---------------------------------------------------------- */
+  footer.site {
+    border-top: 1px solid var(--line); padding: 2rem 0 3rem;
+    font-size: .88rem; color: var(--ink-3);
+  }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+  footer.site a { color: var(--ink-3); }
+  footer.site a:hover { color: var(--accent); }
+
+  @media (max-width: 46rem) {
+    /* The nav wraps to three rows on a phone. Sticking that to the top would
+       cost a third of the viewport on every page. */
+    header.site { position: static; }
+  }
+  @media (max-width: 40rem) {
+    main { padding-top: 2rem; }
+    h2 { margin-top: 2.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">WebCodecs Census <span>docs</span></a>
+    <nav class="site" aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="api.html">API</a>
+        <a href="cdp.html" aria-current="page">CDP driver</a>
+        <a href="mcp.html">MCP server</a>
+        <a href="extension.html">Extension</a>
+        <a href="ci.html">CI</a>
+        <a href="limits.html">Limits</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="system">System</button>
+      <button type="button" data-theme-set="light">Light</button>
+      <button type="button" data-theme-set="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="eyebrow">CDP driver</p>
+    <h1><code>@motionvector/webcodecs-census-cdp</code></h1>
+    <p class="lede">
+      Instrument a page and every one of its Web Workers from outside the app, with no change to
+      the code being measured — and get in before a worker's first line runs.
+    </p>
+
+<pre><code>npm install --save-dev @motionvector/webcodecs-census-cdp</code></pre>
+
+<pre><code>import { attach, launchChrome } from '@motionvector/webcodecs-census-cdp';
+import { summarize } from '@motionvector/webcodecs-census';
+
+const chrome = await launchChrome({ executablePath: CHROME });
+const session = await attach({ browserURL: chrome.browserURL });
+
+await session.navigate('http://localhost:5173/');
+// …drive the app…
+
+console.log(summarize(await session.census()));
+
+session.detach();
+await chrome.kill();</code></pre>
+
+    <h2><code>attach(options)</code></h2>
+
+    <p>Returns a <code>CensusSession</code>. Pass either a browser endpoint or a page socket.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Option</th><th>Type</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>browserURL</code></td><td><code>string</code></td><td>DevTools HTTP endpoint, e.g. <code>http://127.0.0.1:9222</code>. The driver resolves a page target from it.</td></tr>
+          <tr><td><code>webSocketDebuggerUrl</code></td><td><code>string</code></td><td>Or a page target's WebSocket URL directly.</td></tr>
+          <tr><td><code>matchUrl</code></td><td><code>string | RegExp</code></td><td>Choose among page targets when several are open. A string matches as a substring.</td></tr>
+          <tr><td><code>install</code></td><td><code>{ sampleIntervalMs?, keepSamples?, stackDepth? }</code></td><td>Handed to <code>installCensus</code> inside each context.</td></tr>
+          <tr><td><code>shimSource</code></td><td><code>string</code></td><td>Override the injected source. Defaults to the built census shim.</td></tr>
+          <tr><td><code>onContext</code></td><td><code>(info) =&gt; void</code></td><td>Called per instrumented context with <code>{ type, url, sessionId }</code>.</td></tr>
+          <tr><td><code>onError</code></td><td><code>(e: Error) =&gt; void</code></td><td>Called when a context could not be instrumented. Injection failures are reported here rather than thrown.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Ordering inside <code>attach</code> is load-bearing: auto-attach is armed and the document
+      script registered <em>before</em> anything navigates, or a worker can start unobserved.
+      The shim is also evaluated once against the current document, so attaching to an
+      already-loaded page still instruments it — installing twice is a no-op by design.
+    </p>
+
+    <h2><code>CensusSession</code></h2>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Method</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>census()</code></td>
+            <td>
+              Snapshot every context. Each is queried on its own CDP session, so no cross-context
+              message channel is needed and a wedged worker cannot stop the others reporting.
+              Each entry carries <code>targetUrl</code> and <code>targetType</code> alongside the
+              <code>ContextCensus</code> fields.
+            </td>
+          </tr>
+          <tr><td><code>contexts()</code></td><td>Every context currently instrumented, as <code>{ sessionId, type, url }</code>. The page's own session has <code>sessionId: null</code>.</td></tr>
+          <tr><td><code>evaluate(expression, sessionId?)</code></td><td>Run an expression in one context, or the page by default. Awaits promises and returns the value, or <code>null</code> if the call could not be made.</td></tr>
+          <tr><td><code>navigate(url)</code></td><td><code>Page.navigate</code>. The document script is already registered, so the new document is instrumented from its first line.</td></tr>
+          <tr><td><code>redirect(rules)</code></td><td>Serve matching URLs from somewhere else — see below.</td></tr>
+          <tr><td><code>detach()</code></td><td>Stop listening and close the socket. Does not close the browser.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><code>redirect(rules)</code></h3>
+
+    <p>
+      Pins a request to a different URL, so a large media asset can be served from a local copy
+      and a run is fast and repeatable without editing the app under test.
+    </p>
+
+<pre><code>await session.redirect([
+  { from: 'cdn.example.com/big.mp4', to: 'http://127.0.0.1:8081/media.mp4' },
+  { from: /\/segments\/.*\.m4s$/, to: 'http://127.0.0.1:8081/fixture.m4s' },
+]);</code></pre>
+
+    <p>
+      A string rule matches as a substring; a <code>RegExp</code> is tested against the full URL.
+      Everything else continues untouched.
+    </p>
+
+    <h2><code>launchChrome(options)</code></h2>
+
+    <p>
+      Launches Chrome with a throwaway profile. It never reuses, and never kills, a browser you
+      already have open.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Option</th><th>Type</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>executablePath</code></td><td><code>string</code></td><td>required</td><td>Path to a Chrome or Chromium binary.</td></tr>
+          <tr><td><code>port</code></td><td><code>number</code></td><td><code>0</code></td><td>Debugging port. <code>0</code> lets Chrome choose a free one, which is the safe default — a fixed port collides with any browser you already have open for debugging.</td></tr>
+          <tr><td><code>headless</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Pass <code>false</code> to see the window.</td></tr>
+          <tr><td><code>args</code></td><td><code>string[]</code></td><td><code>[]</code></td><td>Extra flags. <code>--user-data-dir</code> and the debugging port are always the driver's.</td></tr>
+          <tr><td><code>startupTimeoutMs</code></td><td><code>number</code></td><td><code>20000</code></td><td>How long to wait for the debugging port.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Returns <code>{ process, browserURL, kill }</code>. <code>kill()</code> signals only the
+      process it spawned and removes only the profile it made, waiting for Chrome's helper
+      processes to exit first — removing the profile straight away races them and fails with
+      <code>ENOTEMPTY</code>.
+    </p>
+
+    <div class="note">
+      <span class="label">Why a throwaway profile, always</span>
+      <p>
+        Attaching to a browser you are signed into risks touching your session, and a shared
+        profile makes runs non-repeatable. Chrome's DevTools Protocol is also
+        <strong>unauthenticated by design</strong>: anything that can reach the port controls the
+        browser. Never expose a debugging port beyond localhost.
+      </p>
+    </div>
+
+    <h2>Also exported</h2>
+
+    <div class="scroll">
+      <table>
+        <tbody>
+          <tr><td><code>findPageTarget(origin, match?)</code></td><td>Resolve a page target from a DevTools endpoint. Throws with the targets it did see, which is usually the fastest way to find out you pointed at the wrong browser.</td></tr>
+          <tr><td><code>CdpClient</code></td><td>A minimal flat-session CDP client, if you need one. It runs on the WebSocket built into Node and has no dependencies — anything larger would pull in a browser-automation stack.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>How it reaches a worker</h2>
+
+    <p>Two Chrome behaviours make a worker reachable, and the second one has a trap in it.</p>
+
+    <ul>
+      <li>
+        <code>Page.addScriptToEvaluateOnNewDocument</code> runs before any page script, on every
+        navigation — which a <code>document_start</code> content script does not guarantee.
+      </li>
+      <li>
+        <code>Target.setAutoAttach</code> with <code>waitForDebuggerOnStart</code> pauses each new
+        worker before its first line.
+      </li>
+    </ul>
+
+    <p>
+      At that auto-attach pause a dedicated worker's global is only half built. Measured on
+      Chrome 151:
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>At the auto-attach pause</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>VideoFrame</code>, <code>AudioData</code>, <code>ImageBitmap</code>, <code>EncodedVideoChunk</code></td><td>present</td></tr>
+          <tr><td><code>VideoDecoder</code>, <code>VideoEncoder</code>, <code>AudioDecoder</code>, <code>AudioEncoder</code></td><td><strong>absent</strong></td></tr>
+          <tr><td><code>setInterval</code>, <code>setTimeout</code>, <code>queueMicrotask</code></td><td><strong>absent</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Patch there and you instrument the frame types but miss every codec. So the driver arms a
+      <code>beforeScriptExecution</code> instrumentation breakpoint and resumes into it. That
+      second pause has the global fully populated and is still before the worker's own script
+      runs. The breakpoint is removed immediately after injection — leaving it armed would pause
+      on every subsequent script the worker loads and stall the app under test.
+    </p>
+
+    <p>
+      If the <code>Debugger</code> domain is unavailable in a target, the driver falls back to
+      injecting at the earlier pause: weaker, but it still catches frame allocations. A worker is
+      <strong>always</strong> resumed, even when injection failed — leaving one paused would hang
+      the page, which is far worse than a gap in the census.
+    </p>
+
+    <p>
+      Auto-attach is not recursive, so each attached target arms it again for its own children.
+      That is what reaches nested workers. <code>data:</code> and <code>blob:</code> URL workers
+      are covered too, and iframes get the document script rather than the pause dance.
+    </p>
+
+    <figure>
+      <img class="only-light" src="injection-light.svg" alt="Sequence diagram of the two-phase injection into a Web Worker.">
+      <img class="only-dark" src="injection-dark.svg" alt="Sequence diagram of the two-phase injection into a Web Worker.">
+    </figure>
+
+    <p>
+      This behaviour is measured rather than specified, so the repository asserts it directly in
+      <code>test/platform-assumptions.test.mjs</code> and prints what it found at each pause. A
+      Chrome change is then reported as a Chrome change, rather than surfacing as a mysterious
+      failure somewhere else.
+    </p>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>MIT &middot; MotionVector</span>
+    <a href="https://github.com/motionvector-dev/webcodecs-census">Source on GitHub</a>
+    <a href="https://www.npmjs.com/package/@motionvector/webcodecs-census">npm</a>
+    <a href="https://github.com/motionvector-dev/webcodecs-census/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll('[data-theme-set]');
+    function paint(mode) {
+      buttons.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.themeSet === mode));
+      });
+    }
+    function read() {
+      try { return localStorage.getItem('wcc-theme') || 'system'; } catch (e) { return 'system'; }
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var mode = b.dataset.themeSet;
+        if (mode === 'system') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', mode);
+        try { localStorage.setItem('wcc-theme', mode); } catch (e) {}
+        paint(mode);
+      });
+    });
+    paint(read());
+  })();
+</script>
+</body>
+</html>

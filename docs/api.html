@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API reference — WebCodecs Census</title>
+<meta name="description" content="The assertion and census API: checkLeaks, expectNoLeaks, installCensus, and the shape of a LeakReport.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%235eead4'/%3E%3Cpath d='M4 5h8M4 8h5M4 11h7' stroke='%2304211d' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  // Before first paint, so a chosen theme does not flash the other one.
+  try {
+    var t = localStorage.getItem('wcc-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<style>
+  /* --- Palette ---------------------------------------------------------
+     Light is the bare :root so a page with no theme signal still has one.
+     Dark is defined twice on purpose: once behind prefers-color-scheme for
+     the "System" setting, once behind [data-theme] so the toggle wins. */
+  :root {
+    --ground: #fbfbfa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --ink: #18181b;
+    --ink-2: #3f3f46;
+    --ink-3: #71717a;
+    --accent: #0d7c6d;
+    --accent-ink: #ffffff;
+    --accent-wash: #0d7c6d14;
+    --code-ink: #27272a;
+    --shadow: 0 1px 2px #18181b0f, 0 8px 24px -16px #18181b26;
+    --light-only: block;
+    --dark-only: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #000000;
+      --surface: #050506;
+      --surface-2: #101012;
+      --line: #232327;
+      --line-strong: #34343a;
+      --ink: #f4f4f5;
+      --ink-2: #b8b8c0;
+      --ink-3: #85858f;
+      --accent: #5eead4;
+      --accent-ink: #04211d;
+      --accent-wash: #5eead414;
+      --code-ink: #d8d8e0;
+      --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+      --light-only: none;
+      --dark-only: block;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #000000;
+    --surface: #050506;
+    --surface-2: #101012;
+    --line: #232327;
+    --line-strong: #34343a;
+    --ink: #f4f4f5;
+    --ink-2: #b8b8c0;
+    --ink-3: #85858f;
+    --accent: #5eead4;
+    --accent-ink: #04211d;
+    --accent-wash: #5eead414;
+    --code-ink: #d8d8e0;
+    --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+    --light-only: none;
+    --dark-only: block;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16.5px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "kern" 1;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* --- Header ---------------------------------------------------------- */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header.site .wrap {
+    display: flex; align-items: center; gap: 1rem 1.5rem;
+    flex-wrap: wrap; padding-top: .85rem; padding-bottom: .85rem;
+  }
+  .brand {
+    font-weight: 620; letter-spacing: -.015em; color: var(--ink);
+    text-decoration: none; font-size: .98rem; white-space: nowrap;
+  }
+  .brand span { color: var(--ink-3); font-weight: 400; }
+  nav.site { display: flex; flex-wrap: wrap; gap: .15rem .35rem; margin-right: auto; }
+  nav.site a {
+    color: var(--ink-3); text-decoration: none; font-size: .875rem;
+    padding: .25rem .5rem; border-radius: .35rem; white-space: nowrap;
+  }
+  nav.site a:hover { color: var(--ink); background: var(--surface-2); }
+  nav.site a[aria-current="page"] { color: var(--accent); background: var(--accent-wash); }
+
+  /* --- Theme toggle ---------------------------------------------------- */
+  .theme {
+    display: inline-flex; border: 1px solid var(--line); border-radius: .45rem;
+    overflow: hidden; background: var(--surface);
+  }
+  .theme button {
+    font: inherit; font-size: .74rem; letter-spacing: .02em;
+    padding: .3rem .55rem; border: 0; background: transparent;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .theme button + button { border-left: 1px solid var(--line); }
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); }
+
+  /* --- Typography ------------------------------------------------------ */
+  main { padding: 3rem 0 5rem; }
+  .eyebrow {
+    font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 .75rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 1.3rem + 3vw, 3rem); line-height: 1.08;
+    letter-spacing: -.03em; font-weight: 640; margin: 0 0 1rem;
+  }
+  h2 {
+    font-size: clamp(1.3rem, 1.1rem + .8vw, 1.6rem); line-height: 1.2;
+    letter-spacing: -.02em; font-weight: 620;
+    margin: 3.5rem 0 1rem; padding-top: 1.75rem; border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 1.05rem; letter-spacing: -.01em; font-weight: 620;
+    margin: 2.25rem 0 .6rem;
+  }
+  h4 { font-size: .95rem; font-weight: 620; margin: 1.75rem 0 .4rem; }
+  p, li { color: var(--ink-2); }
+  .lede { font-size: 1.15rem; line-height: 1.55; color: var(--ink); max-width: 46rem; }
+  strong { color: var(--ink); font-weight: 620; }
+  a { color: var(--accent); text-underline-offset: .18em; text-decoration-thickness: 1px; }
+  ul, ol { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  li::marker { color: var(--ink-3); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 3rem 0; }
+
+  /* --- Code ------------------------------------------------------------ */
+  code, pre, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .855em;
+  }
+  :not(pre) > code {
+    background: var(--surface-2); color: var(--code-ink);
+    padding: .12em .35em; border-radius: .3rem;
+    border: 1px solid var(--line);
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: .6rem; padding: 1rem 1.1rem; margin: 1.25rem 0;
+    overflow-x: auto; line-height: 1.55; color: var(--code-ink);
+    box-shadow: var(--shadow);
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  pre.out { background: var(--surface-2); box-shadow: none; color: var(--ink-2); }
+
+  /* --- Tables ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; margin: 1.25rem 0; border-radius: .6rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: .92rem; }
+  th, td {
+    text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--ink-2);
+  }
+  th {
+    color: var(--ink); font-weight: 600; font-size: .8rem;
+    letter-spacing: .04em; text-transform: uppercase;
+    border-bottom-color: var(--line-strong);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { white-space: nowrap; }
+
+  /* --- Callouts -------------------------------------------------------- */
+  .note {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--surface); border-radius: .5rem;
+    padding: .9rem 1.1rem; margin: 1.5rem 0;
+  }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    display: block; font-size: .72rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+    margin-bottom: .35rem;
+  }
+
+  /* --- Card grid ------------------------------------------------------- */
+  .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 2rem 0; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    border: 1px solid var(--line); border-radius: .6rem;
+    background: var(--surface); padding: 1.1rem 1.2rem;
+  }
+  .card:hover { border-color: var(--line-strong); }
+  .card h3 { margin: 0 0 .3rem; font-size: .98rem; color: var(--ink); }
+  .card p { margin: 0; font-size: .9rem; color: var(--ink-3); }
+
+  /* --- Figures --------------------------------------------------------- */
+  figure { margin: 2rem 0; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  img.only-light { display: var(--light-only); }
+  img.only-dark { display: var(--dark-only); }
+  figcaption { font-size: .85rem; color: var(--ink-3); text-align: center; margin-top: .75rem; }
+
+  /* --- Footer ---------------------------------------------------------- */
+  footer.site {
+    border-top: 1px solid var(--line); padding: 2rem 0 3rem;
+    font-size: .88rem; color: var(--ink-3);
+  }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+  footer.site a { color: var(--ink-3); }
+  footer.site a:hover { color: var(--accent); }
+
+  @media (max-width: 46rem) {
+    /* The nav wraps to three rows on a phone. Sticking that to the top would
+       cost a third of the viewport on every page. */
+    header.site { position: static; }
+  }
+  @media (max-width: 40rem) {
+    main { padding-top: 2rem; }
+    h2 { margin-top: 2.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">WebCodecs Census <span>docs</span></a>
+    <nav class="site" aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="api.html" aria-current="page">API</a>
+        <a href="cdp.html">CDP driver</a>
+        <a href="mcp.html">MCP server</a>
+        <a href="extension.html">Extension</a>
+        <a href="ci.html">CI</a>
+        <a href="limits.html">Limits</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="system">System</button>
+      <button type="button" data-theme-set="light">Light</button>
+      <button type="button" data-theme-set="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="eyebrow">API reference</p>
+    <h1>The assertion API</h1>
+    <p class="lede">
+      Everything exported by <code>@motionvector/webcodecs-census</code>. Two halves: the
+      instrumentation that runs inside a context, and the verdict layer that turns a census into
+      pass or fail.
+    </p>
+
+<pre><code>import {
+  installCensus, localCensus, timeline, resetCensus, VERSION,
+  checkLeaks, expectNoLeaks, expectNoLeakedFrames, summarize, totalLive,
+  TRACKED,
+} from '@motionvector/webcodecs-census';</code></pre>
+
+    <h2>Verdicts</h2>
+
+    <h3><code>checkLeaks(censuses, options?)</code></h3>
+
+    <p>
+      Builds a <code>LeakReport</code> without throwing. <code>checkLeaks(...).ok</code> is the
+      boolean form of every assertion below.
+    </p>
+
+<pre><code>const report = checkLeaks(await session.census(), { types: 'all', allow: { VideoFrame: 2 } });
+if (!report.ok) console.error(report.message);</code></pre>
+
+    <h4><code>LeakOptions</code></h4>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Option</th><th>Type</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>types</code></td>
+            <td><code>TrackedType[] | 'all'</code></td>
+            <td><code>['VideoFrame', 'AudioData', 'ImageBitmap']</code></td>
+            <td>
+              Which types count as <em>live too long</em>. The default is the frame-like types,
+              because a long-lived decoder is normal and a long-lived frame almost never is.
+              <code>'all'</code> resolves to every entry in <code>TRACKED</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><code>allow</code></td>
+            <td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td>
+            <td><code>{}</code></td>
+            <td>
+              Tolerated live count per type, summed across every context. A steady-state pipeline
+              legitimately holds a few. Applies to live counts only — never to
+              <code>collectedUnclosed</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><code>minAgeMs</code></td>
+            <td><code>number</code></td>
+            <td><code>0</code></td>
+            <td>
+              Drops allocation sites whose oldest object is younger than this from
+              <code>report.sites</code>. See the note below — it filters the attribution, not the
+              verdict.
+            </td>
+          </tr>
+          <tr>
+            <td><code>failOnOverClose</code> <em>(v0.3.0)</em></td>
+            <td><code>boolean</code></td>
+            <td><code>false</code></td>
+            <td>
+              Fail when a <code>close()</code> threw. Off by default: the usual cause is a library
+              closing a codec twice, which the app that would see the failure cannot fix. Turn it
+              on for code you own.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="label">What <code>minAgeMs</code> actually does</span>
+      <p>
+        As of v0.2.1 it is applied to <code>report.sites</code> only. It does not filter
+        <code>report.live</code>, and <code>report.ok</code> is computed from
+        <code>report.live</code> — so raising <code>minAgeMs</code> shortens the list of
+        allocation sites in the message without changing pass or fail. If frames that are
+        legitimately in flight are failing your check, raise <code>allow</code>, or take the
+        census at a quieter moment.
+      </p>
+    </div>
+
+    <h4><code>LeakReport</code></h4>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>ok</code></td><td><code>boolean</code></td><td>The verdict. See below for exactly what it is computed from.</td></tr>
+          <tr><td><code>live</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Live objects <strong>of the enforced types</strong>, summed across contexts.</td></tr>
+          <tr><td><code>unenforcedLive</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Live objects of the types <code>types</code> left out. Reported, never failed on.</td></tr>
+          <tr><td><code>collectedUnclosed</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>GC'd without <code>close()</code>, across <strong>every</strong> tracked type. <code>types</code> cannot filter this away.</td></tr>
+          <tr><td><code>enforced</code></td><td><code>TrackedType[]</code></td><td>What <code>types</code> resolved to.</td></tr>
+          <tr><td><code>sites</code></td><td><code>(LeakSite &amp; { context: string })[]</code></td><td>Allocation sites holding live objects of the enforced types, worst first.</td></tr>
+          <tr><td><code>overCloses</code> <em>(v0.3.0)</em></td><td><code>(OverCloseSite &amp; { context: string })[]</code></td><td><code>close()</code> calls that threw, worst first. Always reported; only decides <code>ok</code> under <code>failOnOverClose</code>.</td></tr>
+          <tr><td><code>message</code></td><td><code>string</code></td><td>The human-readable form. This is what <code>expectNoLeaks</code> throws.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>How <code>ok</code> is decided</h4>
+
+    <p><code>ok</code> is true when all of these hold:</p>
+    <ul>
+      <li>no <strong>enforced</strong> type has more live objects than its <code>allow</code> entry (default 0),</li>
+      <li>no <strong>tracked</strong> type has any <code>collectedUnclosed</code> at all, and</li>
+      <li>if <code>failOnOverClose</code> is on, no <code>close()</code> threw.</li>
+    </ul>
+
+    <div class="note">
+      <span class="label">Two invariants the filter cannot break</span>
+      <p>
+        <strong>A definitive leak is never filtered out.</strong> An object the GC collected while
+        it was still open failed to release a resource for its entire lifetime. That fails the
+        check whatever <code>types</code> says. A filter aimed at live frames must not hide a
+        decoder that was dropped on the floor.
+      </p>
+      <p>
+        <strong>An unchecked type is never reported clean.</strong> If a type you left out still
+        holds live objects, the message names it rather than printing an unqualified all-clear:
+      </p>
+<pre class="out"><code>No leaks in VideoFrame, AudioData, ImageBitmap — but VideoDecoder=47 still
+live and not enforced. Pass types: 'all' to check those too.</code></pre>
+    </div>
+
+    <h3>What the platform does behind your back <em>(v0.3.0)</em></h3>
+
+    <p>
+      Two things happen to a codec that no <code>close()</code> call in your source explains.
+      Getting either one wrong makes the report lie in a different direction.
+    </p>
+
+    <h4>A failing codec is closed by the platform</h4>
+
+    <p>
+      The spec's Close algorithm sets <code>[[state]]</code> to <code>"closed"</code>
+      <em>before</em> it invokes your error callback, so no <code>close()</code> call ever reaches
+      the instrumentation. Left alone, that codec stays counted live and, once collected, is filed
+      as <code>collectedUnclosed</code> — "definitively leaked" for a resource the platform had
+      already reclaimed.
+    </p>
+    <p>
+      The census reconciles live codecs against their own <code>state</code>, records the
+      departure as the <code>closedByPlatform</code> fate, and does not call it a leak.
+      Reconciliation runs on every sample tick <em>and</em> at the top of
+      <code>localCensus()</code>, so a census taken straight after a decode error is already
+      correct. A detector that invents leaks in an error-heavy pipeline is worse than one that
+      stays quiet.
+    </p>
+
+    <h4>Closing an already-closed codec throws</h4>
+
+    <p>
+      Measured on Chrome 151: the four codec types throw <code>InvalidStateError</code>; the three
+      frame types are idempotent and throw nothing. From a library closing out of a floating
+      <code>.finally()</code>, that surfaces as an unhandled rejection no application code can
+      catch — the platform reports it to nobody who can act on it.
+    </p>
+    <p>
+      Those calls are counted, grouped by type, message and calling line, in
+      <code>ContextCensus.overCloses</code> and <code>LeakReport.overCloses</code>. The throw is
+      observed, never swallowed: the caller still sees what the platform threw, or instrumenting
+      the app would change how it behaves.
+    </p>
+
+<pre class="out"><code>3 close() call(s) threw — a codec was closed twice:
+  3x VideoDecoder: Cannot call 'close' on a closed codec (in worker)
+      at decodePump (pipeline.js:812:20)</code></pre>
+
+    <p>
+      An over-close is a lifecycle defect, not a leak, so it never fails a check on its own. Pass
+      <code>failOnOverClose: true</code> for code you own.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th><code>OverCloseSite</code></th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>type</code></td><td>Which tracked type the call was made on.</td></tr>
+          <tr><td><code>message</code></td><td>What the platform threw, e.g. <code>Cannot call 'close' on a closed codec</code>.</td></tr>
+          <tr><td><code>stack</code></td><td>The line that called <code>close()</code>.</td></tr>
+          <tr><td><code>count</code></td><td>How many times that exact site threw. Grouped because the thing doing it usually runs per frame.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><code>expectNoLeaks(censuses, options?)</code></h3>
+
+    <p>
+      Runs <code>checkLeaks</code> and throws <code>new Error(report.message)</code> unless
+      <code>ok</code>. The message carries the counts and up to five allocation sites with three
+      stack frames each — enough to act on from a CI log.
+    </p>
+
+<pre><code>expectNoLeaks(await session.census(), { types: 'all' });</code></pre>
+
+    <h3><code>expectNoLeakedFrames(censuses, options?)</code></h3>
+
+    <p>
+      The common case, named for what it means: <code>expectNoLeaks</code> with
+      <code>types: ['VideoFrame']</code>. Note that <code>options</code> is spread
+      <em>after</em> the default, so passing your own <code>types</code> overrides it.
+    </p>
+
+<pre><code>expectNoLeakedFrames(await session.census());
+expectNoLeakedFrames(await session.census(), { allow: { VideoFrame: 3 } });</code></pre>
+
+    <p>
+      Because only <code>VideoFrame</code> is enforced, a live <code>AudioData</code> shows up in
+      <code>unenforcedLive</code> and in the message rather than failing the test.
+    </p>
+
+    <h3><code>summarize(censuses)</code></h3>
+
+    <p>
+      A compact digest, sized for an agent or a CI log to read in one go. One line per context
+      plus the default verdict. Deliberately small: a full census is mostly stack strings.
+    </p>
+
+<pre class="out"><code>2 context(s): main, worker
+  main (3s): nothing live
+  worker (3s): VideoDecoder=1 VideoFrame=5 | media 4 (1 stalled)
+
+5 VideoFrame still live (allowed 0).
+
+Held by:
+  5x VideoFrame (decoded, oldest 100ms) in worker
+      at VideoSample.toVideoFrame (pipeline.js:17261:14)
+      (frame emitted by this VideoDecoder)</code></pre>
+
+    <p>
+      <code>summarize</code> uses the <em>default</em> <code>types</code>. If you are enforcing
+      the codecs, call <code>checkLeaks</code> yourself and print its <code>message</code>.
+    </p>
+
+    <h3><code>totalLive(censuses, type)</code></h3>
+
+    <p>Sums one type's live count across contexts. Returns a number.</p>
+
+<pre><code>const frames = totalLive(await session.census(), 'VideoFrame');</code></pre>
+
+    <h3><code>TRACKED</code></h3>
+
+    <p>
+      The seven types whose resources GC cannot reclaim, in order. <code>TrackedType</code> is
+      the union of its members.
+    </p>
+
+<pre><code>['VideoDecoder', 'VideoEncoder', 'AudioDecoder', 'AudioEncoder',
+ 'VideoFrame', 'AudioData', 'ImageBitmap']</code></pre>
+
+    <h2>Instrumentation</h2>
+
+    <h3><code>installCensus(options?)</code></h3>
+
+    <p>
+      Patches this context's globals. Safe to call more than once — a second call only updates
+      <code>context</code> and returns, so re-running it after HMR or a second bundle chunk does
+      not reset the counters or double-patch a constructor.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Option</th><th>Type</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>context</code></td><td><code>string</code></td><td>guessed</td><td>Name for this context in reports. The guess is <code>main</code>, <code>worker</code>, <code>shared-worker</code>, <code>service-worker</code> or <code>unknown</code>.</td></tr>
+          <tr><td><code>sampleIntervalMs</code></td><td><code>number | false</code></td><td><code>500</code></td><td>Rolling timeline interval. <code>false</code> disables sampling.</td></tr>
+          <tr><td><code>keepSamples</code></td><td><code>number</code></td><td><code>240</code></td><td>How many samples to retain. Older ones are dropped.</td></tr>
+          <tr><td><code>stackDepth</code></td><td><code>number</code></td><td><code>8</code></td><td>Frames of allocation stack to keep per object.</td></tr>
+          <tr><td><code>warnOnCollect</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Log a console warning when an object is GC'd without <code>close()</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Each patch step is wrapped separately. A global that is missing in this context costs you
+      that one patch and is recorded in <code>problems[]</code> — it never aborts the install, and
+      it is never swallowed.
+    </p>
+
+    <p>
+      <code>installCensus</code> also exposes <code>globalThis.__webcodecsCensus</code>: a
+      function returning the local census, with <code>.local()</code>, <code>.timeline()</code>,
+      <code>.reset()</code> and <code>.version</code> attached. That is how the CDP driver and
+      the extension read a context they injected into.
+    </p>
+
+    <h3><code>localCensus()</code></h3>
+
+    <p>
+      A <code>ContextCensus</code> for <strong>this context only</strong>. Collecting a worker's
+      census means running this inside that worker.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>context</code></td><td><code>string</code></td><td>The context name.</td></tr>
+          <tr><td><code>uptimeMs</code></td><td><code>number</code></td><td>How long the census has been installed. Makes rates computable.</td></tr>
+          <tr><td><code>entered</code></td><td><code>Record&lt;string, number&gt;</code></td><td>Keyed <code>Type:origin</code>, e.g. <code>VideoFrame:decoded</code>.</td></tr>
+          <tr><td><code>left</code></td><td><code>Record&lt;string, number&gt;</code></td><td>Keyed <code>Type:fate</code> — <code>closed</code>, <code>transferred</code>, or <code>closedByPlatform</code> (v0.3.0).</td></tr>
+          <tr><td><code>live</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Open right now, by type.</td></tr>
+          <tr><td><code>collectedUnclosed</code></td><td><code>Partial&lt;Record&lt;TrackedType, number&gt;&gt;</code></td><td>Collected by GC without <code>close()</code>. Unambiguous.</td></tr>
+          <tr><td><code>closedUnseen</code></td><td><code>number</code></td><td>Closed here but never seen entering — usually a receive path the message scanner missed.</td></tr>
+          <tr><td><code>overCloses</code> <em>(v0.3.0)</em></td><td><code>OverCloseSite[]</code></td><td><code>close()</code> calls that threw, worst first. A lifecycle bug, not a leak.</td></tr>
+          <tr><td><code>leakSites</code></td><td><code>LeakSite[]</code></td><td>Live objects grouped by allocation site, worst first.</td></tr>
+          <tr><td><code>oldestLive</code></td><td><code>LiveObject[]</code></td><td>The ten oldest live objects, each with its stack and age.</td></tr>
+          <tr><td><code>mediaElements</code></td><td><code>MediaElementCensus</code></td><td><code>{ total, stalled, byReadyState }</code>.</td></tr>
+          <tr><td><code>timeline</code></td><td><code>Sample[]</code></td><td>The rolling samples.</td></tr>
+          <tr><td><code>problems</code></td><td><code>string[]</code></td><td>Anything that could not be instrumented here. Non-empty means the numbers are a floor, not a total.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><code>timeline()</code></h3>
+
+    <p>The rolling samples on their own. Each <code>Sample</code>:</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>t</code></td><td>ms since install.</td></tr>
+          <tr><td><code>live</code></td><td>Live counts by type at that moment.</td></tr>
+          <tr><td><code>gained</code> / <code>lost</code></td><td>Entered and left since the previous sample, by type.</td></tr>
+          <tr><td><code>activity</code></td><td><code>{ decodeCalls, encodeCalls, outputs, errors, queued, configured }</code>. <code>queued</code> is summed <code>decodeQueueSize</code>/<code>encodeQueueSize</code> across live codecs — backpressure.</td></tr>
+          <tr><td><code>mediaElements</code></td><td>Element totals and how many are stalled.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      This is what separates a busy pipeline from a wedged one. Decoder idle, queue empty and the
+      live count frozen means wedged; a snapshot alone reads it as normal.
+    </p>
+
+    <div class="note">
+      <span class="label">Timers arrive late in a worker</span>
+      <p>
+        A worker paused before its first line has <code>VideoFrame</code> but not
+        <code>setInterval</code>. The sampler therefore starts on the first tracked allocation
+        after the worker resumes, not at install time — so an early census can legitimately have
+        an empty <code>timeline</code>.
+      </p>
+    </div>
+
+    <h3><code>resetCensus()</code></h3>
+
+    <p>
+      Clears the counters without unpatching. Tests need this; nothing else should. Objects that
+      were live before the reset are forgotten, so a reset mid-run hides a real leak.
+    </p>
+
+    <h3><code>VERSION</code></h3>
+
+    <p>
+      The core's version string, stamped into every census payload and readable in-page as
+      <code>__webcodecsCensus.version</code>. The release script rewrites it, and fails loudly
+      if it ever stops matching its pattern.
+    </p>
+
+    <h2>Subpath exports</h2>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Specifier</th><th>What it gives you</th></tr></thead>
+        <tbody>
+          <tr><td><code>@motionvector/webcodecs-census</code></td><td>The ESM API above.</td></tr>
+          <tr><td><code>@motionvector/webcodecs-census/shim</code></td><td><code>SHIM_SOURCE</code>: the census bundled as a self-installing IIFE, as a string, for injecting into a context you do not control.</td></tr>
+          <tr><td><code>@motionvector/webcodecs-census/shim.txt</code></td><td>The same IIFE as a file, for serving or reading directly.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      The injected build reads its options from <code>globalThis.__webcodecsCensusOptions</code>
+      before installing, because an IIFE has no callable export.
+      <a href="cdp.html">The CDP driver</a> does this for you.
+    </p>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>MIT &middot; MotionVector</span>
+    <a href="https://github.com/motionvector-dev/webcodecs-census">Source on GitHub</a>
+    <a href="https://www.npmjs.com/package/@motionvector/webcodecs-census">npm</a>
+    <a href="https://github.com/motionvector-dev/webcodecs-census/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll('[data-theme-set]');
+    function paint(mode) {
+      buttons.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.themeSet === mode));
+      });
+    }
+    function read() {
+      try { return localStorage.getItem('wcc-theme') || 'system'; } catch (e) { return 'system'; }
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var mode = b.dataset.themeSet;
+        if (mode === 'system') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', mode);
+        try { localStorage.setItem('wcc-theme', mode); } catch (e) {}
+        paint(mode);
+      });
+    });
+    paint(read());
+  })();
+</script>
+</body>
+</html>

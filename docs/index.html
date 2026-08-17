@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebCodecs Census</title>
+<meta name="description" content="Find leaked VideoFrames, AudioData and codecs in a WebCodecs app — including inside Web Workers — with the line of code that allocated them.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%235eead4'/%3E%3Cpath d='M4 5h8M4 8h5M4 11h7' stroke='%2304211d' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<script>
+  // Before first paint, so a chosen theme does not flash the other one.
+  try {
+    var t = localStorage.getItem('wcc-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<style>
+  /* --- Palette ---------------------------------------------------------
+     Light is the bare :root so a page with no theme signal still has one.
+     Dark is defined twice on purpose: once behind prefers-color-scheme for
+     the "System" setting, once behind [data-theme] so the toggle wins. */
+  :root {
+    --ground: #fbfbfa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --ink: #18181b;
+    --ink-2: #3f3f46;
+    --ink-3: #71717a;
+    --accent: #0d7c6d;
+    --accent-ink: #ffffff;
+    --accent-wash: #0d7c6d14;
+    --code-ink: #27272a;
+    --shadow: 0 1px 2px #18181b0f, 0 8px 24px -16px #18181b26;
+    --light-only: block;
+    --dark-only: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #000000;
+      --surface: #050506;
+      --surface-2: #101012;
+      --line: #232327;
+      --line-strong: #34343a;
+      --ink: #f4f4f5;
+      --ink-2: #b8b8c0;
+      --ink-3: #85858f;
+      --accent: #5eead4;
+      --accent-ink: #04211d;
+      --accent-wash: #5eead414;
+      --code-ink: #d8d8e0;
+      --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+      --light-only: none;
+      --dark-only: block;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #000000;
+    --surface: #050506;
+    --surface-2: #101012;
+    --line: #232327;
+    --line-strong: #34343a;
+    --ink: #f4f4f5;
+    --ink-2: #b8b8c0;
+    --ink-3: #85858f;
+    --accent: #5eead4;
+    --accent-ink: #04211d;
+    --accent-wash: #5eead414;
+    --code-ink: #d8d8e0;
+    --shadow: 0 1px 2px #00000080, 0 12px 40px -24px #000000;
+    --light-only: none;
+    --dark-only: block;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16.5px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "kern" 1;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* --- Header ---------------------------------------------------------- */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header.site .wrap {
+    display: flex; align-items: center; gap: 1rem 1.5rem;
+    flex-wrap: wrap; padding-top: .85rem; padding-bottom: .85rem;
+  }
+  .brand {
+    font-weight: 620; letter-spacing: -.015em; color: var(--ink);
+    text-decoration: none; font-size: .98rem; white-space: nowrap;
+  }
+  .brand span { color: var(--ink-3); font-weight: 400; }
+  nav.site { display: flex; flex-wrap: wrap; gap: .15rem .35rem; margin-right: auto; }
+  nav.site a {
+    color: var(--ink-3); text-decoration: none; font-size: .875rem;
+    padding: .25rem .5rem; border-radius: .35rem; white-space: nowrap;
+  }
+  nav.site a:hover { color: var(--ink); background: var(--surface-2); }
+  nav.site a[aria-current="page"] { color: var(--accent); background: var(--accent-wash); }
+
+  /* --- Theme toggle ---------------------------------------------------- */
+  .theme {
+    display: inline-flex; border: 1px solid var(--line); border-radius: .45rem;
+    overflow: hidden; background: var(--surface);
+  }
+  .theme button {
+    font: inherit; font-size: .74rem; letter-spacing: .02em;
+    padding: .3rem .55rem; border: 0; background: transparent;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .theme button + button { border-left: 1px solid var(--line); }
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); }
+
+  /* --- Typography ------------------------------------------------------ */
+  main { padding: 3rem 0 5rem; }
+  .eyebrow {
+    font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 .75rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 1.3rem + 3vw, 3rem); line-height: 1.08;
+    letter-spacing: -.03em; font-weight: 640; margin: 0 0 1rem;
+  }
+  h2 {
+    font-size: clamp(1.3rem, 1.1rem + .8vw, 1.6rem); line-height: 1.2;
+    letter-spacing: -.02em; font-weight: 620;
+    margin: 3.5rem 0 1rem; padding-top: 1.75rem; border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 1.05rem; letter-spacing: -.01em; font-weight: 620;
+    margin: 2.25rem 0 .6rem;
+  }
+  h4 { font-size: .95rem; font-weight: 620; margin: 1.75rem 0 .4rem; }
+  p, li { color: var(--ink-2); }
+  .lede { font-size: 1.15rem; line-height: 1.55; color: var(--ink); max-width: 46rem; }
+  strong { color: var(--ink); font-weight: 620; }
+  a { color: var(--accent); text-underline-offset: .18em; text-decoration-thickness: 1px; }
+  ul, ol { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  li::marker { color: var(--ink-3); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 3rem 0; }
+
+  /* --- Code ------------------------------------------------------------ */
+  code, pre, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .855em;
+  }
+  :not(pre) > code {
+    background: var(--surface-2); color: var(--code-ink);
+    padding: .12em .35em; border-radius: .3rem;
+    border: 1px solid var(--line);
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: .6rem; padding: 1rem 1.1rem; margin: 1.25rem 0;
+    overflow-x: auto; line-height: 1.55; color: var(--code-ink);
+    box-shadow: var(--shadow);
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  pre.out { background: var(--surface-2); box-shadow: none; color: var(--ink-2); }
+
+  /* --- Tables ---------------------------------------------------------- */
+  .scroll { overflow-x: auto; margin: 1.25rem 0; border-radius: .6rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; font-size: .92rem; }
+  th, td {
+    text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line);
+    vertical-align: top; color: var(--ink-2);
+  }
+  th {
+    color: var(--ink); font-weight: 600; font-size: .8rem;
+    letter-spacing: .04em; text-transform: uppercase;
+    border-bottom-color: var(--line-strong);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code { white-space: nowrap; }
+
+  /* --- Callouts -------------------------------------------------------- */
+  .note {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--surface); border-radius: .5rem;
+    padding: .9rem 1.1rem; margin: 1.5rem 0;
+  }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .label {
+    display: block; font-size: .72rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+    margin-bottom: .35rem;
+  }
+
+  /* --- Card grid ------------------------------------------------------- */
+  .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 2rem 0; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    border: 1px solid var(--line); border-radius: .6rem;
+    background: var(--surface); padding: 1.1rem 1.2rem;
+  }
+  .card:hover { border-color: var(--line-strong); }
+  .card h3 { margin: 0 0 .3rem; font-size: .98rem; color: var(--ink); }
+  .card p { margin: 0; font-size: .9rem; color: var(--ink-3); }
+
+  /* --- Figures --------------------------------------------------------- */
+  figure { margin: 2rem 0; }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  img.only-light { display: var(--light-only); }
+  img.only-dark { display: var(--dark-only); }
+  figcaption { font-size: .85rem; color: var(--ink-3); text-align: center; margin-top: .75rem; }
+
+  /* --- Footer ---------------------------------------------------------- */
+  footer.site {
+    border-top: 1px solid var(--line); padding: 2rem 0 3rem;
+    font-size: .88rem; color: var(--ink-3);
+  }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+  footer.site a { color: var(--ink-3); }
+  footer.site a:hover { color: var(--accent); }
+
+  @media (max-width: 46rem) {
+    /* The nav wraps to three rows on a phone. Sticking that to the top would
+       cost a third of the viewport on every page. */
+    header.site { position: static; }
+  }
+  @media (max-width: 40rem) {
+    main { padding-top: 2rem; }
+    h2 { margin-top: 2.5rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">WebCodecs Census <span>docs</span></a>
+    <nav class="site" aria-label="Sections">
+        <a href="index.html" aria-current="page">Overview</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="api.html">API</a>
+        <a href="cdp.html">CDP driver</a>
+        <a href="mcp.html">MCP server</a>
+        <a href="extension.html">Extension</a>
+        <a href="ci.html">CI</a>
+        <a href="limits.html">Limits</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="system">System</button>
+      <button type="button" data-theme-set="light">Light</button>
+      <button type="button" data-theme-set="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <p class="eyebrow">WebCodecs Census</p>
+    <h1>Find the frame you forgot to close.</h1>
+    <p class="lede">
+      A leak detector for WebCodecs apps. It counts every <code>VideoFrame</code>,
+      <code>AudioData</code> and codec a page holds open — including the ones inside a
+      Web Worker — and hands back the line of code that allocated them.
+    </p>
+
+    <div class="cards">
+      <a class="card" href="quickstart.html">
+        <h3>Quickstart &rarr;</h3>
+        <p>Install, attach, read a leak report. Three ways in.</p>
+      </a>
+      <a class="card" href="api.html">
+        <h3>API reference &rarr;</h3>
+        <p><code>checkLeaks</code>, <code>expectNoLeaks</code>, and what a report means.</p>
+      </a>
+      <a class="card" href="ci.html">
+        <h3>CI recipes &rarr;</h3>
+        <p>Make a leak a test failure instead of a mystery.</p>
+      </a>
+      <a class="card" href="limits.html">
+        <h3>Honest limits &rarr;</h3>
+        <p>What it cannot see, and what it says instead of guessing.</p>
+      </a>
+    </div>
+
+    <h2>The problem</h2>
+
+    <p>
+      WebCodecs objects hold resources from a finite pool outside the JS heap. The garbage
+      collector never reclaims them; only <code>close()</code> does. Chrome's own guidance is
+      blunt about the consequence: forget <code>frame.close()</code> and you leak GPU memory
+      fast.
+    </p>
+    <p>
+      Nothing in the platform tells you <em>that</em> you leaked one, <em>how many</em>, or
+      <em>where from</em>. The app just gets slower, then quietly stops decoding. DevTools'
+      Media panel lists media players; it does not attribute frame lifetimes. As far as we can
+      find, nothing else does either.
+    </p>
+
+    <h2>What you get</h2>
+
+    <p>One call, structured output, no screenshots:</p>
+
+<pre><code>import { attach, launchChrome } from '@motionvector/webcodecs-census-cdp';
+import { summarize } from '@motionvector/webcodecs-census';
+
+const chrome = await launchChrome({ executablePath: CHROME });
+const session = await attach({ browserURL: chrome.browserURL });
+await session.navigate('http://localhost:5173/');
+
+console.log(summarize(await session.census()));   // page + every worker</code></pre>
+
+<pre class="out"><code>2 context(s): main, worker
+  main (3s): nothing live
+  worker (3s): VideoDecoder=1 VideoFrame=5
+
+5 VideoFrame still live (allowed 0).
+
+Held by:
+  5x VideoFrame (decoded, oldest 100ms) in worker
+      at VideoSample.toVideoFrame (pipeline.js:17261:14)
+      (frame emitted by this VideoDecoder)</code></pre>
+
+    <p>
+      The last three lines are the whole point. A count alone cannot be acted on; an allocation
+      site can.
+    </p>
+
+    <h2>Why this is hard, and why it didn't exist</h2>
+
+    <p>
+      Decoders almost always live in a Web Worker. Page-level monkey-patching — how
+      <a href="https://github.com/BabylonJS/Spector.js">Spector.js</a> and
+      <a href="https://github.com/brendan-duncan/webgpu_inspector">WebGPU Inspector</a> both
+      work — cannot reach a worker the page created. That is the whole problem, and it has two
+      teeth:
+    </p>
+    <ul>
+      <li>
+        A Manifest V3 <code>world: "MAIN"</code> content script at <code>document_start</code>
+        is <strong>not guaranteed</strong> to run before the page's inline scripts.
+      </li>
+      <li>
+        Rewriting <code>new Worker()</code> to load a shim from a blob URL <strong>fails
+        outright</strong> on any site whose CSP omits <code>blob:</code> from
+        <code>worker-src</code>/<code>script-src</code>.
+      </li>
+    </ul>
+    <p>
+      Either failure is silent, and a leak detector that silently sees nothing reports a clean
+      bill of health for an app that is losing every frame. That is worse than having no tool.
+    </p>
+
+    <h3>The two-phase injection</h3>
+
+    <p>
+      <code>Target.setAutoAttach</code> with <code>waitForDebuggerOnStart</code> pauses a worker
+      before its first line. Inject there and you catch an allocation on line 1. But at that
+      moment a dedicated worker's global is only half built. Measured on Chrome 151:
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>At the auto-attach pause</th><th>Present</th><th>Absent</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>VideoFrame</code>, <code>AudioData</code>, <code>ImageBitmap</code>, <code>EncodedVideoChunk</code></td><td>yes</td><td></td></tr>
+          <tr><td><code>VideoDecoder</code>, <code>VideoEncoder</code>, <code>AudioDecoder</code>, <code>AudioEncoder</code></td><td></td><td>absent</td></tr>
+          <tr><td><code>setInterval</code>, <code>setTimeout</code>, <code>queueMicrotask</code></td><td></td><td>absent</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Patch there and you instrument the frame types but miss <strong>every codec</strong> — most
+      of what the tool is for. So the driver resumes into a second, later pause: a
+      <code>beforeScriptExecution</code> instrumentation breakpoint. That fires with the global
+      fully populated and still before the worker's own script runs. It is the only moment that
+      is both complete and early enough.
+    </p>
+
+    <figure>
+      <img class="only-light" src="injection-light.svg" alt="Sequence diagram of the two-phase injection: the driver arms auto-attach, Chrome pauses the new worker before its first line where codecs and timers do not yet exist, the driver sets a beforeScriptExecution breakpoint and resumes into a second pause where the global is complete, and injects the census there.">
+      <img class="only-dark" src="injection-dark.svg" alt="Sequence diagram of the two-phase injection: the driver arms auto-attach, Chrome pauses the new worker before its first line where codecs and timers do not yet exist, the driver sets a beforeScriptExecution breakpoint and resumes into a second pause where the global is complete, and injects the census there.">
+      <figcaption>Two pauses per worker. The first is early but incomplete; the second is both.</figcaption>
+    </figure>
+
+    <p>
+      Auto-attach is not recursive, so each attached target arms it again for its children. That
+      is what reaches nested workers. This behaviour is measured rather than specified, so
+      <code>test/platform-assumptions.test.mjs</code> asserts it directly and prints what it
+      found — a Chrome change is reported as a Chrome change rather than surfacing as a
+      mysterious failure elsewhere.
+    </p>
+
+    <h3>Decoded frames never pass through a constructor</h3>
+
+    <p>
+      The frames that leak in production are not the ones you build with
+      <code>new VideoFrame()</code>. They are created by the platform and handed to the
+      <code>output</code> callback you gave <code>new VideoDecoder({ output })</code>. An
+      instrument that only traps the constructor counts a handful of hand-built frames and
+      misses the entire decode pipeline.
+    </p>
+    <p>
+      The census wraps the <code>output</code> callback at construction time. Because there are
+      no application frames above a platform callback, a decoded frame is attributed to
+      <strong>the decoder that produced it</strong> — which is the line you can act on.
+      <code>.clone()</code> is tracked too: it returns an independent handle needing its own
+      <code>close()</code>, and it also bypasses the constructor.
+    </p>
+
+    <h3>Why not just take a heap snapshot?</h3>
+
+    <p>
+      Chrome's <a href="https://github.com/ChromeDevTools/chrome-devtools-mcp">DevTools MCP
+      server</a> gained heap-snapshot tools for agents in Chrome 151, which is the natural thing
+      to reach for. It cannot answer this question, for three structural reasons rather than one
+      fixable one. Measured against this repository's own fixture, which leaks five
+      <code>VideoFrame</code>s inside a worker:
+    </p>
+
+    <div class="scroll">
+      <table>
+        <tbody>
+          <tr><td>Heap snapshot of the page target</td><td>4 <code>VideoFrame</code> nodes, <strong>84 bytes</strong> total</td></tr>
+          <tr><td><code>webcodecs_census</code></td><td><code>VideoFrame: 5</code>, attributed to the decoder that produced them</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ol>
+      <li>
+        <strong>Wrong heap.</strong> A WebCodecs object's resource lives outside the JS heap —
+        the entire reason <code>close()</code> exists. The snapshot measures JS wrappers, so it
+        understates a frame holding megabytes of GPU memory as tens of bytes.
+      </li>
+      <li>
+        <strong>Wrong scope.</strong> The leak is in a worker, and a page-target snapshot does
+        not cover worker isolates.
+      </li>
+      <li>
+        <strong>Wrong question.</strong> A frame collected by GC <em>without</em>
+        <code>close()</code> is the most definitive leak there is, and it is gone from the heap
+        by the time you could snapshot it. Only a <code>FinalizationRegistry</code> sees it,
+        which is what this does.
+      </li>
+    </ol>
+
+    <p>
+      The two compose rather than compete: several CDP clients can attach to one page at the
+      same time, so an agent can run Chrome's DevTools MCP for JS-heap and performance work and
+      this one for media object lifetimes.
+    </p>
+
+    <h2>What it tracks</h2>
+
+    <p>
+      <code>VideoDecoder</code>, <code>VideoEncoder</code>, <code>AudioDecoder</code>,
+      <code>AudioEncoder</code>, <code>VideoFrame</code>, <code>AudioData</code>,
+      <code>ImageBitmap</code> — plus <code>&lt;video&gt;</code> and <code>&lt;audio&gt;</code>
+      elements. Each live object records how it entered the context, because provenance decides
+      whether a leak is yours:
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Origin</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>constructed</code></td><td><code>new VideoFrame(...)</code> here</td></tr>
+          <tr><td><code>decoded</code></td><td>produced by a codec, attributed to that codec's construction site</td></tr>
+          <tr><td><code>cloned</code></td><td><code>.clone()</code> — an independent handle needing its own <code>close()</code></td></tr>
+          <tr><td><code>received</code></td><td>arrived over <code>postMessage</code>; this context owns it now</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Departures are accounted for just as carefully. Transferring a <code>VideoFrame</code>
+      detaches the sender's handle <em>without</em> calling <code>close()</code>, and the receiver
+      gets it by structured clone rather than a constructor — counted naively that is a false leak
+      in one context and an invisible object in the other. A <code>FinalizationRegistry</code>
+      catches the unambiguous case: an object collected by GC that was never closed. And since
+      v0.3.0, a codec the platform closed after an error is recognised as gone rather than filed
+      as leaked, because the spec closes it before your error callback runs.
+    </p>
+
+    <h2>Who this is for</h2>
+
+    <p>
+      Anything decoding or encoding in the browser: timeline editors, recorders, transcoders,
+      players that seek by decoding.
+      <a href="https://www.w3.org/2021/03/media-production-workshop/talks/slides/soeren-balko-clipchamp-webcodecs.pdf">Clipchamp
+      presented its WebCodecs pipeline at a W3C workshop</a>, and
+      <a href="https://www.remotion.dev/blog/mediabunny">Remotion has folded its media parser
+      into mediabunny</a> and now recommends it. The more of your pipeline lives in a library,
+      the more of it an app-only instrument cannot see.
+    </p>
+
+    <div class="note">
+      <span class="label">Works through libraries</span>
+      <p>
+        If you use a toolkit like <a href="https://github.com/Vanilagy/mediabunny">mediabunny</a>,
+        you never write <code>new VideoDecoder</code> — the library does. The census patches the
+        globals, and mediabunny references them at call time rather than capturing them at module
+        scope, so everything it builds internally is counted.
+        <code>test/mediabunny.test.mjs</code> builds a real MP4 with mediabunny, decodes it back
+        through its own sinks, and asserts that the leak lands on the exact method whose
+        double-ownership contract was broken.
+      </p>
+    </div>
+
+    <h2>Three packages, one version</h2>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Package</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>@motionvector/webcodecs-census</code></td>
+            <td>The instrumentation core and the assertion API. No dependencies. <a href="api.html">Reference</a></td>
+          </tr>
+          <tr>
+            <td><code>@motionvector/webcodecs-census-cdp</code></td>
+            <td>Injects the census into a running Chrome, workers included. <a href="cdp.html">Reference</a></td>
+          </tr>
+          <tr>
+            <td><code>@motionvector/webcodecs-census-mcp</code></td>
+            <td>An MCP server, so an agent can do all of the above. <a href="mcp.html">Reference</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      They share one version, because <code>-cdp</code> and <code>-mcp</code> depend on an
+      <em>exact</em> version of the core. A <a href="extension.html">Chrome extension</a> covers
+      the case where you want to look at a tab by hand.
+    </p>
+
+    <h2>Prior art</h2>
+
+    <ul>
+      <li>
+        <a href="https://github.com/brendan-duncan/webgpu_inspector">webgpu_inspector</a> —
+        excellent, actively maintained, and the quality bar for this project. Solves the
+        analogous problem for WebGPU. Does not cover WebCodecs.
+      </li>
+      <li>
+        <a href="https://github.com/BabylonJS/Spector.js">Spector.js</a> — WebGL. Page-level
+        patching, same worker blind spot.
+      </li>
+      <li>Chrome DevTools Media panel — lists players and logs; does not attribute frame lifetimes.</li>
+      <li>
+        <a href="https://github.com/ChromeDevTools/chrome-devtools-mcp">chrome-devtools-mcp</a> —
+        the official agent surface for DevTools. Strong at JS-heap leaks and performance; blind
+        to resources held outside the JS heap. Runs alongside this one.
+      </li>
+    </ul>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>MIT &middot; MotionVector</span>
+    <a href="https://github.com/motionvector-dev/webcodecs-census">Source on GitHub</a>
+    <a href="https://www.npmjs.com/package/@motionvector/webcodecs-census">npm</a>
+    <a href="https://github.com/motionvector-dev/webcodecs-census/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll('[data-theme-set]');
+    function paint(mode) {
+      buttons.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.themeSet === mode));
+      });
+    }
+    function read() {
+      try { return localStorage.getItem('wcc-theme') || 'system'; } catch (e) { return 'system'; }
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var mode = b.dataset.themeSet;
+        if (mode === 'system') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', mode);
+        try { localStorage.setItem('wcc-theme', mode); } catch (e) {}
+        paint(mode);
+      });
+    });
+    paint(read());
+  })();
+</script>
+</body>
+</html>
