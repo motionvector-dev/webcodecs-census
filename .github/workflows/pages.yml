@@ -37,7 +37,7 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check the site loads nothing from the network
         # Outbound <a href> links are fine and expected. A remote *asset* is
@@ -51,9 +51,9 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs
 
