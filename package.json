@@ -18,10 +18,10 @@
     "build:diagram": "node scripts/make-diagram.mjs"
   },
   "devDependencies": {
-    "@types/node": "^22.20.1",
-    "esbuild": "^0.25.0",
-    "mediabunny": "^1.53.1",
-    "typescript": "^5.7.0"
+    "@types/node": "^26.6.3",
+    "esbuild": "^0.28.2",
+    "mediabunny": "^1.60.0",
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=20"
