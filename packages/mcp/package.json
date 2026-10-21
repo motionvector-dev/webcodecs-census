@@ -14,7 +14,7 @@
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --packages=external --banner:js='#!/usr/bin/env node' --outfile=dist/index.js && chmod +x dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@motionvector/webcodecs-census": "0.3.1",
     "@motionvector/webcodecs-census-cdp": "0.3.1"
   },
